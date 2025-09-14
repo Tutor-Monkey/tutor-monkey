@@ -63,6 +63,18 @@ const resources: ResourceFolderType[] = [
             gtmLabel: "AP Calculus BC Chapter 2 Quiz Review Key"
           }
         ]
+      },
+      {
+        title: "AP Calculus BC CH2 2.3-2.4 Quiz",
+        description: "Quiz covering derivative rules 2.3-2.4",
+        links: [
+          {
+            label: "View PDF",
+            url: "https://drive.google.com/file/d/1yk_mgxmIlJGk2OosBupwbTmmCwoz3qdV/view?usp=sharing",
+            id: "calc-bc-deriv-ch2-2-3-2-4-quiz",
+            gtmLabel: "AP Calculus BC CH2 2.3-2.4 Quiz PDF"
+          }
+        ]
       }
     ]
   }
