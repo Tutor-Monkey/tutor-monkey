@@ -47,6 +47,18 @@ const resources: ResourceFolderType[] = [
         ]
       },
       {
+        title: "AP Calculus BC Chapter 2 Review",
+        description: "Comprehensive review for Chapter 2 (derivatives)",
+        links: [
+          {
+            label: "View PDF",
+            url: "https://drive.google.com/file/d/1Cjrd9HmldQ7blnSCMOx4OzHPUpIl1aLN/view?usp=sharing",
+            id: "calc-bc-deriv-ch2-review",
+            gtmLabel: "AP Calculus BC Chapter 2 Review PDF"
+          }
+        ]
+      },
+      {
         title: "AP Calculus BC Chapter 2 Quiz Review",
         description: "Quiz review for derivatives",
         links: [
@@ -73,6 +85,18 @@ const resources: ResourceFolderType[] = [
             url: "https://drive.google.com/file/d/1yk_mgxmIlJGk2OosBupwbTmmCwoz3qdV/view?usp=sharing",
             id: "calc-bc-deriv-ch2-2-3-2-4-quiz",
             gtmLabel: "AP Calculus BC CH2 2.3-2.4 Quiz PDF"
+          }
+        ]
+      },
+      {
+        title: "AP Calculus BC CH2 2.5-2.6 Quiz",
+        description: "Quiz covering derivative rules 2.5-2.6",
+        links: [
+          {
+            label: "View PDF",
+            url: "https://drive.google.com/file/d/1tg2k3I_wMcWW5y0IhVux7GYKS7ONAaO2/view?usp=sharing",
+            id: "calc-bc-deriv-ch2-2-5-2-6-quiz",
+            gtmLabel: "AP Calculus BC CH2 2.5-2.6 Quiz PDF"
           }
         ]
       }
