@@ -192,12 +192,6 @@ export default function TutorsPage() {
                     </div>
                   </div>
 
-                  
-
-                  <p className="text-gray-600 text-sm leading-relaxed font-light italic mb-4">
-                    &ldquo;{tutor.quote}&rdquo;
-                  </p>
-
                   <div className="mb-4">
                     <h4 className="font-medium text-gray-900 mb-2">Subjects:</h4>
                     <div className="flex flex-wrap gap-2">
