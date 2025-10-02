@@ -89,6 +89,14 @@ export default function AutoPlayTextSequence() {
               </Link>
             </motion.div>
           </motion.div>
+          <motion.p
+            className="mt-8 text-sm sm:text-base text-white/80"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.9 }}
+          >
+            TutorMonkey is a non-profit organization dedicated to making high-quality tutoring accessible for every student.
+          </motion.p>
         </div>
       </div>
     </div>

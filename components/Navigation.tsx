@@ -45,7 +45,7 @@ export default function Navigation() {
 
             {/* Desktop Nav Links */}
             <div className="hidden min-[796px]:flex items-center gap-10 font-semibold text-white">
-              <Link href="/tutors" className="hover:opacity-80 transition-opacity">Tutors</Link>
+              <Link href="/tutors" className="hover:opacity-80 transition-opacity">Team</Link>
               <Link href="/testimonials" className="hover:opacity-80 transition-opacity">Testimonials</Link>
               <Link href="/about" className="hover:opacity-80 transition-opacity">About</Link>
               <Link href="/contact" className="hover:opacity-80 transition-opacity">Contact</Link>

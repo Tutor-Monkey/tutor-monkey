@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import React from "react";
 import { LINKS } from "@/components/links";
 import Navigation from "@/components/Navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useIsClient } from "@/hooks/useIsClient";
 import Footer from "@/components/Footer";
 
@@ -22,16 +22,18 @@ export default function TutorsPage() {
       rating: 5,
       image: LINKS.joshuaWuImage,
       achievements: ["AP Calculus BC", "Perfect PSAT Math", "Robotics Team"],
+      roles: ["Tutor", "Founder", "Logistics"],
     },
     {
       name: "Sanjit Konda",
-      school: "Junior at Plano West",
+      school: "Junior at Plano Senior",
       subjects: ["Mathematics", "Science", "Computer Science"],
       quote:
         "Every student learns differently, and I adapt my teaching style accordingly.",
       rating: 5,
       image: LINKS.sanjitKondaImage,
       achievements: ["AP Calculus BC", "Perfect PSAT Math", "Science Fair Winner"],
+      roles: ["Tutor", "Founder", "Logistics"],
     },
     {
       name: "James Chen",
@@ -42,6 +44,7 @@ export default function TutorsPage() {
       rating: 5,
       image: LINKS.jamesChenImage,
       achievements: ["AP Human Geography 5", "Speech & Debate", "4 AP Courses"],
+      roles: ["Tutor", "Founder", "Education"],
     },
     {
       name: "Joshua Gan",
@@ -52,6 +55,7 @@ export default function TutorsPage() {
       rating: 5,
       image: LINKS.joshuaGanImage,
       achievements: ["Top 10 Class Rank", "Perfect PSAT Math", "BPA State Finalist"],
+      roles: ["Tutor", "Founder", "Education"],
     },
     {
       name: "Skanda Gopikannan",
@@ -65,6 +69,7 @@ export default function TutorsPage() {
         "Multiple AP Courses",
         "State Tournament Winner",
       ],
+      roles: ["Tutor", "Founder", "Education"],
     },
     {
       name: "Matthew Xie",
@@ -75,6 +80,7 @@ export default function TutorsPage() {
       rating: 5,
       image: LINKS.matthewXieImage,
       achievements: ["DHR on AMC10", "Gold on BPhO IPC", "AP Physics 1 (5)"],
+      roles: ["Tutor"],
     },
     {
       name: "Jennifer Duan",
@@ -85,6 +91,16 @@ export default function TutorsPage() {
       rating: 5,
       image: LINKS.jenniferDuanImage,
       achievements: ["6 AP Classes", "Science Fair Winner", "Girls in STEM Officer"],
+      roles: ["Tutor", "Outreach"],
+    },
+    {
+      name: "Collin Cui",
+      school: "Junior at Plano West",
+      subjects: ["Community Outreach", "Partnerships"],
+      quote: "Community connections power our mission to reach more students.",
+      rating: 5,
+      achievements: ["Plano West Outreach Lead", "National Honor Society Volunteer"],
+      roles: ["Outreach"],
     },
     {
       name: "Enoch Chan",
@@ -95,6 +111,7 @@ export default function TutorsPage() {
       rating: 5,
       image: LINKS.enochChanImage,
       achievements: ["MATHCOUNTS State", "Perfect PSAT Math", "Robotics State Level"],
+      roles: ["Tutor", "Education"],
     },
     {
       name: "Ishaan Nirmal",
@@ -109,8 +126,34 @@ export default function TutorsPage() {
         "AI Club Founder",
         "Published Researcher",
       ],
+      roles: ["Tutor", "Education"],
     },
   ];
+
+  const memberSections = [
+    {
+      title: "Founders",
+      role: "Founder",
+      description: "The core team that launched TutorMonkey and shapes our mission.",
+    },
+    {
+      title: "Education",
+      role: "Education",
+      description: "Curriculum leads who design lessons and keep our instruction sharp.",
+    },
+    {
+      title: "Logistics",
+      role: "Logistics",
+      description: "Operations minds handling scheduling, platforms, and student support.",
+    },
+    {
+      title: "Outreach",
+      role: "Outreach",
+      description: "Community connectors spreading the word and building partnerships.",
+    },
+  ];
+
+  const tutorCount = tutors.filter((member) => member.roles.includes("Tutor")).length;
 
   // Framer Motion variants
   const fadeInUp = {
@@ -143,7 +186,7 @@ export default function TutorsPage() {
             animate="show"
             transition={{ duration: 0.5 }}
           >
-            Meet Our Tutors
+            Meet the Team
           </motion.h1>
           <motion.p
             className="text-xl md:text-2xl text-gray-600 mb-12 max-w-3xl mx-auto font-light"
@@ -152,86 +195,128 @@ export default function TutorsPage() {
             animate="show"
             transition={{ duration: 0.5, delay: 0.1 }}
           >
-            Exceptional students from Plano West helping you succeed
+            The founders, educators, and volunteers behind Tutor Monkey are dedicated to making tutoring accessible for every student.
           </motion.p>
         </div>
       </section>
 
-      {/* Tutors Grid */}
+      {/* Team Sections */}
       <section className="py-20 px-6">
-        <div className="max-w-7xl mx-auto">
-          <motion.div
-            className="grid md:grid-cols-2 lg:grid-cols-3 gap-8"
-            variants={container}
-            initial="hidden"
-            animate="show"
-          >
-            <AnimatePresence>
-              {tutors.map((tutor, index) => (
+        <div className="max-w-7xl mx-auto space-y-20">
+          {memberSections.map((section) => {
+            const members = tutors.filter((tutor) => tutor.roles.includes(section.role));
+
+            if (members.length === 0) {
+              return null;
+            }
+
+            return (
+              <div key={section.title} className="space-y-12">
                 <motion.div
-                  key={tutor.name}
+                  className="text-center"
                   variants={fadeInUp}
-                  transition={{ duration: 0.4, delay: index * 0.08 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover-lift"
+                  initial="hidden"
+                  whileInView="show"
+                  viewport={{ once: true, amount: 0.2 }}
+                  transition={{ duration: 0.5 }}
                 >
-                  <div className="flex items-center mb-4">
-                    <div className="relative w-16 h-16 rounded-full overflow-hidden mr-4">
-                      <Image
-                        src={tutor.image || "/placeholder.svg"}
-                        alt={tutor.name}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900 font-display">
-                        {tutor.name}
-                      </h3>
-                      <p className="text-gray-600 font-medium">{tutor.school}</p>
-                    </div>
-                  </div>
-
-                  <div className="mb-4">
-                    <h4 className="font-medium text-gray-900 mb-2">Subjects:</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {tutor.subjects.map((subject) => (
-                        <span
-                          key={subject}
-                          className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-light"
-                        >
-                          {subject}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mb-4">
-                    <h4 className="font-medium text-gray-900 mb-2">Achievements:</h4>
-                    <ul className="space-y-1">
-                      {tutor.achievements.map((achievement) => (
-                        <li
-                          key={achievement}
-                          className="text-sm text-gray-600 font-light flex items-center"
-                        >
-                          <div className="w-1 h-1 bg-gray-400 rounded-full mr-2"></div>
-                          {achievement}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="text-center">
-                    <Link href="/book">
-                      <Button className="w-full bg-gray-900 text-white hover:bg-gray-800 py-2 rounded-lg transition-all duration-300 font-medium text-sm">
-                        Book with {tutor.name.split(" ")[0]}
-                      </Button>
-                    </Link>
-                  </div>
+                  <h2 className="text-3xl md:text-4xl font-light text-gray-900 mb-4 font-display">
+                    {section.title}
+                  </h2>
+                  {section.description && (
+                    <p className="text-lg text-gray-600 font-light max-w-3xl mx-auto">
+                      {section.description}
+                    </p>
+                  )}
                 </motion.div>
-              ))}
-            </AnimatePresence>
-          </motion.div>
+
+                <motion.div
+                  className="grid md:grid-cols-2 lg:grid-cols-3 gap-8"
+                  variants={container}
+                  initial="hidden"
+                  whileInView="show"
+                  viewport={{ once: true, amount: 0.2 }}
+                >
+                  {members.map((tutor, index) => {
+                    const isTutor = tutor.roles.includes("Tutor");
+
+                    return (
+                      <motion.div
+                        key={tutor.name}
+                        variants={fadeInUp}
+                        transition={{ duration: 0.4, delay: index * 0.08 }}
+                        className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover-lift"
+                      >
+                        <div className="flex items-center mb-4">
+                          <div className="relative w-16 h-16 rounded-full overflow-hidden mr-4">
+                            <Image
+                              src={tutor.image || "/placeholder.svg"}
+                              alt={tutor.name}
+                              fill
+                              className="object-cover"
+                            />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-medium text-gray-900 font-display">
+                              {tutor.name}
+                            </h3>
+                            <p className="text-gray-600 font-medium">{tutor.school}</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {tutor.roles.map((role) => (
+                                <span
+                                  key={role}
+                                  className="px-3 py-1 bg-gray-900/5 text-gray-700 rounded-full text-xs font-medium uppercase tracking-wide"
+                                >
+                                  {role}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mb-4">
+                          <p className="text-gray-600 italic text-sm">"{tutor.quote}"</p>
+                        </div>
+
+                        {tutor.subjects?.length ? (
+                          <div className="mb-4">
+                            <h4 className="font-medium text-gray-900 mb-2">Focus Areas:</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {tutor.subjects.map((subject) => (
+                                <span
+                                  key={subject}
+                                  className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-light"
+                                >
+                                  {subject}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {tutor.achievements?.length ? (
+                          <div className="mb-4">
+                            <h4 className="font-medium text-gray-900 mb-2">Highlights:</h4>
+                            <ul className="space-y-1">
+                              {tutor.achievements.map((achievement) => (
+                                <li
+                                  key={achievement}
+                                  className="text-sm text-gray-600 font-light flex items-center"
+                                >
+                                  <div className="w-1 h-1 bg-gray-400 rounded-full mr-2"></div>
+                                  {achievement}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </motion.div>
+                    );
+                  })}
+                </motion.div>
+              </div>
+            );
+          })}
         </div>
       </section>
 
@@ -259,7 +344,7 @@ export default function TutorsPage() {
             viewport={{ once: true, amount: 0.2 }}
           >
             {[
-              { label: "Expert Tutors", value: "9" },
+              { label: "Expert Tutors", value: String(tutorCount) },
               { label: "Average Rating", value: "5.0" },
               { label: "Subjects Each", value: "6+" },
               { label: "Plano ISD Students", value: "100%" },
