@@ -99,6 +99,30 @@ const resources: ResourceFolderType[] = [
             gtmLabel: "AP Calculus BC CH2 2.5-2.6 Quiz PDF"
           }
         ]
+      },
+      {
+        title: "AP Calculus BC Optimization Worksheet",
+        description: "Practice problems focused on optimization applications of derivatives",
+        links: [
+          {
+            label: "View PDF",
+            url: "https://drive.google.com/file/d/1nfyHPY5CJvBR4KATlOKEgCn-bbzOcdvk/view?usp=sharing",
+            id: "calc-bc-optimization-worksheet",
+            gtmLabel: "AP Calculus BC Optimization Worksheet PDF"
+          }
+        ]
+      },
+      {
+        title: "AP Calculus BC Integration and Differential Equations",
+        description: "Review covering integration techniques and differential equations practice",
+        links: [
+          {
+            label: "View PDF",
+            url: "https://drive.google.com/file/d/1fXmUMMEHYn3MCkM5QI85LWoZbgviPg-5/view?usp=sharing",
+            id: "calc-bc-integration-diff-eq",
+            gtmLabel: "AP Calculus BC Integration and Differential Equations PDF"
+          }
+        ]
       }
     ]
   }
