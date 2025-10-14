@@ -5,8 +5,12 @@ export function useAutoPlayTextSequence() {
 
   const textSequence = [
     {
-      headline: "Tutoring that speaks your language.",
-      subtext: "Student-led, Plano-based, tailored to your classroom."
+      headline: "Student-led tutoring, 100% free.",
+      subtext: "Plano students helping their peers thrive with no cost lessons."
+    },
+    {
+      headline: "We're a nonprofit built by students for students.",
+      subtext: "Every session reinvests into better resources for our community."
     },
     {
       headline: "We've taken the same classes as you.",
@@ -14,19 +18,15 @@ export function useAutoPlayTextSequence() {
     },
     {
       headline: "Tutors who remember what it's like to be stuck.",
-      subtext: "No judgment. Just straight answers and study strategies."
+      subtext: "No judgment. Just straight answers, study strategies, and encouragement."
     },
     {
       headline: "Ask anything. Work at your pace.",
-      subtext: "Live sessions online, with flexible scheduling."
-    },
-    {
-      headline: "Better than YouTube. More personal than your classroom.",
-      subtext: ""
+      subtext: "Live sessions online, with flexible scheduling and zero fees."
     },
     {
       headline: "Ready to stop guessing and start understanding?",
-      subtext: ""
+      subtext: "Join a student-led nonprofit committed to free academic support."
     }
   ];
 

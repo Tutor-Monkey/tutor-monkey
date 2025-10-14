@@ -51,7 +51,7 @@ export default function AboutPage() {
               className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto font-light"
               style={{ color: 'var(--textDark)' }}
             >
-              Our story, mission, and commitment to student success
+              Learn how our student-led nonprofit delivers free tutoring to every learner.
             </motion.p>
 
           </div>
@@ -78,13 +78,13 @@ export default function AboutPage() {
               >
                 <h2 className="text-4xl font-light text-gray-900 mb-6 font-display">Our Story</h2>
                 <p className="text-lg text-gray-600 mb-6 font-light">
-                  Tutor Monkey was founded by students who recognized a crucial gap in education support. 
-                  We believe that peer-to-peer tutoring creates a unique learning environment where students 
-                  feel comfortable asking questions and sharing their challenges.
+                  Tutor Monkey was founded by students who recognized a crucial gap in accessible academic support. 
+                  We built a student-led nonprofit so free, peer-to-peer lessons could meet students where they are 
+                  and create a space where questions feel welcome.
                 </p>
                 <p className="text-lg text-gray-600 font-light">
-                  What started as a small group of students helping their peers has grown into a 
-                  community-wide initiative that has helped hundreds of students achieve their academic goals.
+                  What started as a small group of friends helping their classmates has grown into a 
+                  community-wide initiative that provides hundreds of no-cost tutoring sessions each year.
                 </p>
               </motion.div>
               
@@ -95,12 +95,13 @@ export default function AboutPage() {
               >
                 <h2 className="text-4xl font-light text-gray-900 mb-6 font-display">Our Mission</h2>
                 <p className="text-lg text-gray-600 mb-6 font-light">
-                  We&apos;re committed to making quality tutoring accessible to every student. By connecting 
-                  students with peer tutors who have recently mastered the same subjects, we create 
-                  relatable and effective learning experiences.
+                  We&apos;re committed to making high-quality tutoring accessible—and free—for every student. By connecting 
+                  learners with peer tutors who have recently mastered the same subjects, we create 
+                  relatable and effective learning experiences without financial barriers.
                 </p>
                 <p className="text-lg text-gray-600 font-light">
-                  As a nonprofit organization, we reinvest every dollar back into our programs and platform, and we donate a portion of proceeds to education initiatives and classroom grants in our community.
+                  As a student-led nonprofit, every donation and grant is reinvested into expanding free lessons, better resources, 
+                  and classroom grants that strengthen education across our community.
                 </p>
               </motion.div>
             </div>
@@ -127,16 +128,16 @@ export default function AboutPage() {
             <div className="grid md:grid-cols-3 gap-12">
               {[
                 {
-                  title: "Student-Centered",
-                  description: "We put students' needs first, creating personalized learning experiences that work for them."
+                  title: "Student-Led",
+                  description: "High school students run Tutor Monkey, designing support that reflects real classroom experiences."
+                },
+                {
+                  title: "Free Access",
+                  description: "Every lesson is free, powered by volunteers and nonprofit partnerships that remove financial barriers."
                 },
                 {
                   title: "Peer Support",
                   description: "We believe in the power of peer-to-peer learning to create comfortable and effective tutoring sessions."
-                },
-                {
-                  title: "Community Impact",
-                  description: "We're committed to building a strong educational community, reinvesting in our programs, and donating to education initiatives."
                 }
               ].map((value, index) => (
                 <motion.div
@@ -176,7 +177,7 @@ export default function AboutPage() {
               transition={{ duration: 0.8, delay: 3.0 }}
               className="text-xl text-gray-600 mb-12 font-light"
             >
-                                Whether you&apos;re a student looking for help or want to become a tutor, we&apos;d love to have you join us
+                                Whether you&apos;re looking for a free lesson or want to volunteer as a peer tutor, we&apos;d love to have you join us.
             </motion.p>
             <motion.div 
               initial={{ opacity: 0, y: 20 }}

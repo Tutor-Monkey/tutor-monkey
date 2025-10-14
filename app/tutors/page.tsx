@@ -238,8 +238,6 @@ export default function TutorsPage() {
                   viewport={{ once: true, amount: 0.2 }}
                 >
                   {members.map((tutor, index) => {
-                    const isTutor = tutor.roles.includes("Tutor");
-
                     return (
                       <motion.div
                         key={tutor.name}
@@ -272,10 +270,6 @@ export default function TutorsPage() {
                               ))}
                             </div>
                           </div>
-                        </div>
-
-                        <div className="mb-4">
-                          <p className="text-gray-600 italic text-sm">"{tutor.quote}"</p>
                         </div>
 
                         {tutor.subjects?.length ? (

@@ -95,7 +95,7 @@ export default function AutoPlayTextSequence() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.9 }}
           >
-            TutorMonkey is a non-profit organization dedicated to making high-quality tutoring accessible for every student.
+            TutorMonkey is a student-led nonprofit delivering completely free, high-quality tutoring to every learner.
           </motion.p>
         </div>
       </div>
