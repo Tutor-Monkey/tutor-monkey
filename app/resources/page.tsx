@@ -125,6 +125,23 @@ const resources: ResourceFolderType[] = [
         ]
       }
     ]
+  },
+  {
+    title: "Biology",
+    resources: [
+      {
+        title: "Cell Transport Review Worksheet",
+        description: "Practice questions reviewing diffusion, osmosis, and active transport concepts.",
+        links: [
+          {
+            label: "View Worksheet",
+            url: "https://drive.google.com/file/d/1sn9MyV1LrzrLTM0_lR4erxHGZKJcgomy/view?usp=sharing",
+            id: "biology-cell-transport-review",
+            gtmLabel: "Biology Cell Transport Review Worksheet PDF"
+          }
+        ]
+      }
+    ]
   }
 ];
 
