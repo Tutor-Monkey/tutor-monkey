@@ -8,7 +8,6 @@ import { ResourceFolder as ResourceFolderType } from "@/types/resources";
 const resources: ResourceFolderType[] = [
   {
     title: "AP Calculus BC",
-    defaultOpen: true,
     resources: [
       {
         title: "AP Calculus BC Limits Review",
