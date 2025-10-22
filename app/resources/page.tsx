@@ -122,6 +122,54 @@ const resources: ResourceFolderType[] = [
             gtmLabel: "AP Calculus BC Integration and Differential Equations PDF"
           }
         ]
+      },
+      {
+        title: "Calculus Quiz: Integration, Slope Fields, and Applications",
+        description: "Quiz covering integration practice, slope fields, and application problems.",
+        links: [
+          {
+            label: "View PDF",
+            url: "https://drive.google.com/file/d/1u5w5vTb1MJOxiYort69SCPN5YbBWfOlx/view?usp=sharing",
+            id: "calc-bc-integration-slope-fields-quiz",
+            gtmLabel: "Calculus Quiz Integration Slope Fields Applications PDF"
+          }
+        ]
+      },
+      {
+        title: "Calculus Homework: Area and Trig Integrals",
+        description: "Homework set focused on area problems and trigonometric integrals.",
+        links: [
+          {
+            label: "View PDF",
+            url: "https://drive.google.com/file/d/1dDHKbAiWLOOEYQqEUOlkVkilRHw98IZ7/view?usp=sharing",
+            id: "calc-bc-area-trig-integrals-homework",
+            gtmLabel: "Calculus Homework Area and Trig Integrals PDF"
+          }
+        ]
+      },
+      {
+        title: "Calculus Quiz: Area and Trig Integrals",
+        description: "Quiz assessing understanding of area calculations and trigonometric integrals.",
+        links: [
+          {
+            label: "View PDF",
+            url: "https://drive.google.com/file/d/1Kq_AxXp8afa_tEZRwihJNXQTe6jqE7tV/view?usp=sharing",
+            id: "calc-bc-area-trig-integrals-quiz",
+            gtmLabel: "Calculus Quiz Area and Trig Integrals PDF"
+          }
+        ]
+      },
+      {
+        title: "Integration Homework: Applications and Techniques",
+        description: "Homework practice on integration techniques and applied problems.",
+        links: [
+          {
+            label: "View PDF",
+            url: "https://drive.google.com/file/d/1k1jqNR6lSdDSF8dY7E0cya9t9HyLXZbQ/view?usp=sharing",
+            id: "calc-bc-integration-applications-techniques-homework",
+            gtmLabel: "Integration Homework Applications and Techniques PDF"
+          }
+        ]
       }
     ]
   },
@@ -137,6 +185,24 @@ const resources: ResourceFolderType[] = [
             url: "https://drive.google.com/file/d/1sn9MyV1LrzrLTM0_lR4erxHGZKJcgomy/view?usp=sharing",
             id: "biology-cell-transport-review",
             gtmLabel: "Biology Cell Transport Review Worksheet PDF"
+          }
+        ]
+      },
+      {
+        title: "Protein Synthesis Worksheet",
+        description: "Exercises covering transcription, translation, and genetic code practice.",
+        links: [
+          {
+            label: "View Worksheet",
+            url: "https://drive.google.com/file/d/1fheGsxvXTXXC_Ybz8RqVHlxYOx6nEQ8L/view?usp=sharing",
+            id: "biology-protein-synthesis-worksheet",
+            gtmLabel: "Biology Protein Synthesis Worksheet PDF"
+          },
+          {
+            label: "View Answer Key",
+            url: "https://drive.google.com/file/d/1pfyA_MKvMOoTS_DrGejJWBWrAWPk6mSN/view?usp=sharing",
+            id: "biology-protein-synthesis-worksheet-key",
+            gtmLabel: "Biology Protein Synthesis Worksheet Answer Key PDF"
           }
         ]
       }
