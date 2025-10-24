@@ -128,6 +128,18 @@ export default function TutorsPage() {
       ],
       roles: ["Tutor", "Education"],
     },
+    // New member added here
+    {
+      name: "Sam Luong",
+      school: "Junior at Plano West",
+      subjects: ["Mathematics", "Computer Science", "Physics"],
+      quote:
+        "Creating a supportive learning environment is key to unlocking a student's potential.",
+      rating: 5,
+      image: LINKS.samLuongImage, // Assuming you have a link defined for Sam Luong
+      achievements: ["Perfect PSAT Math", "8 APs - All 5s", "High GPA"],
+      roles: ["Tutor", "Education"],
+    },
   ];
 
   const memberSections = [
