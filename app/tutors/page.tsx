@@ -131,7 +131,7 @@ export default function TutorsPage() {
     // New member added here
     {
       name: "Sam Luong",
-      school: "Junior at Plano West",
+      school: "Sophomore at Jasper",
       subjects: ["Mathematics", "Computer Science", "Physics"],
       quote:
         "Creating a supportive learning environment is key to unlocking a student's potential.",
