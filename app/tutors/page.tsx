@@ -137,7 +137,7 @@ export default function TutorsPage() {
         "Creating a supportive learning environment is key to unlocking a student's potential.",
       rating: 5,
       image: LINKS.samLuongImage, // Assuming you have a link defined for Sam Luong
-      achievements: ["Perfect PSAT Math", "8 APs - All 5s", "High GPA"],
+      achievements: ["Perfect PSAT Math", "Taking 8 AP Classes", ""],
       roles: ["Tutor", "Education"],
     },
   ];

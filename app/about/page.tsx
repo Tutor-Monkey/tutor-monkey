@@ -95,13 +95,7 @@ export default function AboutPage() {
               >
                 <h2 className="text-4xl font-light text-gray-900 mb-6 font-display">Our Mission</h2>
                 <p className="text-lg text-gray-600 mb-6 font-light">
-                  We&apos;re committed to making high-quality tutoring accessible—and free—for every student. By connecting 
-                  learners with peer tutors who have recently mastered the same subjects, we create 
-                  relatable and effective learning experiences without financial barriers.
-                </p>
-                <p className="text-lg text-gray-600 font-light">
-                  As a student-led nonprofit, every donation and grant is reinvested into expanding free lessons, better resources, 
-                  and classroom grants that strengthen education across our community.
+                  Tutor Monkey is a 501c3 official nonprofit tutoring organization offering completely free lessons for children. Our mission is to connect every learner with a compassionate peer tutor who understands their coursework and can meet them where they are. Beyond live sessions, Tutor Monkey creates free worksheets so teachers unwilling or unable to pay for official resources still have extra practice materials to share.
                 </p>
               </motion.div>
             </div>
