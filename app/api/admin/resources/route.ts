@@ -3,7 +3,8 @@ import {
   addResourceToSupabase,
   deleteResourceFromSupabase,
   readResources,
-  updateResourceInSupabase
+  updateResourceInSupabase,
+  reorder
 } from "@/lib/resources";
 
 const ADMIN_TOKEN = process.env.ADMIN_API_TOKEN;
@@ -69,56 +70,73 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const payload = (await request.json()) as AdminUpdateResourcePayload;
-  if (payload.action !== "updateResource") {
-    return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
+  const payload = await request.json();
+
+  if (payload.action === "updateResource") {
+    const {
+      resourceId,
+      folderTitle,
+      createFolder,
+      resource,
+      newFolderTitle,
+      defaultOpen
+    } = payload as AdminUpdateResourcePayload;
+
+    if (!resourceId?.trim()) {
+      return NextResponse.json({ error: "Resource id is required" }, { status: 400 });
+    }
+
+    const targetTitle = (createFolder ? newFolderTitle : folderTitle)?.trim();
+    if (!targetTitle) {
+      return NextResponse.json({ error: "Folder title is required" }, { status: 400 });
+    }
+
+    if (!isResourceValid(resource)) {
+      return NextResponse.json({ error: "Invalid resource payload" }, { status: 400 });
+    }
+
+    const validLinks = sanitizeLinks(resource.links);
+    if (validLinks.length === 0) {
+      return NextResponse.json({ error: "At least one link is required" }, { status: 400 });
+    }
+
+    try {
+      const resources = await updateResourceInSupabase({
+        resourceId: resourceId.trim(),
+        folderTitle: targetTitle,
+        createFolder: Boolean(createFolder),
+        defaultOpen,
+        resource: {
+          title: resource.title.trim(),
+          description: resource.description.trim(),
+          links: validLinks
+        }
+      });
+
+      return NextResponse.json({ success: true, resources }, { status: 200 });
+    } catch (error) {
+      console.error("Failed to update resource", error);
+      return NextResponse.json({ error: "Failed to update resource" }, { status: 500 });
+    }
   }
 
-  const {
-    resourceId,
-    folderTitle,
-    createFolder,
-    resource,
-    newFolderTitle,
-    defaultOpen
-  } = payload;
-
-  if (!resourceId?.trim()) {
-    return NextResponse.json({ error: "Resource id is required" }, { status: 400 });
+  if (payload.action === "reorder") {
+    // basic validation of payload shape
+    const reorderPayload = payload as AdminReorderPayload;
+    try {
+      const resources = await reorder({
+        folders: reorderPayload.folders,
+        resources: reorderPayload.resources,
+        links: reorderPayload.links
+      });
+      return NextResponse.json({ success: true, resources }, { status: 200 });
+    } catch (error) {
+      console.error("Failed to reorder resources", error);
+      return NextResponse.json({ error: "Failed to reorder resources" }, { status: 500 });
+    }
   }
 
-  const targetTitle = (createFolder ? newFolderTitle : folderTitle)?.trim();
-  if (!targetTitle) {
-    return NextResponse.json({ error: "Folder title is required" }, { status: 400 });
-  }
-
-  if (!isResourceValid(resource)) {
-    return NextResponse.json({ error: "Invalid resource payload" }, { status: 400 });
-  }
-
-  const validLinks = sanitizeLinks(resource.links);
-  if (validLinks.length === 0) {
-    return NextResponse.json({ error: "At least one link is required" }, { status: 400 });
-  }
-
-  try {
-    const resources = await updateResourceInSupabase({
-      resourceId: resourceId.trim(),
-      folderTitle: targetTitle,
-      createFolder: Boolean(createFolder),
-      defaultOpen,
-      resource: {
-        title: resource.title.trim(),
-        description: resource.description.trim(),
-        links: validLinks
-      }
-    });
-
-    return NextResponse.json({ success: true, resources }, { status: 200 });
-  } catch (error) {
-    console.error("Failed to update resource", error);
-    return NextResponse.json({ error: "Failed to update resource" }, { status: 500 });
-  }
+  return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
 }
 
 export async function DELETE(request: NextRequest) {
@@ -164,6 +182,13 @@ interface AdminUpdateResourcePayload extends AdminBaseResourcePayload {
 
 interface AdminDeleteResourcePayload {
   resourceId: string;
+}
+
+interface AdminReorderPayload {
+  action: "reorder";
+  folders?: string[];
+  resources?: Array<{ folderId: string; resourceIds: string[] }>;
+  links?: Array<{ resourceId: string; linkIds: string[] }>;
 }
 
 function isResourceValid(resource: AdminBaseResourcePayload["resource"] | undefined): resource is AdminBaseResourcePayload["resource"] {

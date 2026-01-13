@@ -39,53 +39,115 @@ export async function readResources(): Promise<ResourceFolder[]> {
         id,
         title,
         default_open,
+        position,
         resources:resources (
           id,
           title,
           description,
+          position,
           links:resource_links (
             id,
             label,
             url,
             gtm_label,
-            anchor_id
+            anchor_id,
+            position
           )
         )
       `
-    )
-    .order("title", { ascending: true })
-    .order("title", { foreignTable: "resources", ascending: true })
-    .order("label", { foreignTable: "resources.resource_links", ascending: true });
+    );
 
   if (error) {
     console.error("Failed to read resources from Supabase", error);
     throw new Error("Unable to load resources");
   }
 
-  return (data ?? []).map((folder) => ({
+  // Normalize and sort using the optional position fields. If position is absent, fall back to alphabetical order.
+  const normalized = (data ?? []).map((folder) => ({
     id: folder.id,
     title: folder.title,
     defaultOpen: folder.default_open ?? undefined,
+    position: typeof folder.position === "number" ? folder.position : undefined,
     resources:
-      folder.resources?.map((resource) => ({
-        id: resource.id,
-        title: resource.title,
-        description: resource.description ?? "",
-        links:
-          resource.links?.map((link) =>
-            normalizeLink(folder.title, resource.title, {
-              label: link.label,
-              url: link.url,
-              id: link.anchor_id ?? link.id,
-              gtmLabel: link.gtm_label ?? undefined
+      (folder.resources ?? [])
+        .map((resource) => ({
+          id: resource.id,
+          title: resource.title,
+          description: resource.description ?? "",
+          position: typeof resource.position === "number" ? resource.position : undefined,
+          links:
+            (resource.links ?? []).map((link) => {
+              const normalizedLink = normalizeLink(folder.title, resource.title, {
+                label: link.label,
+                url: link.url,
+                id: link.anchor_id ?? link.id,
+                gtmLabel: link.gtm_label ?? undefined
+              });
+              return {
+                ...normalizedLink,
+                position: typeof link.position === "number" ? link.position : undefined
+              };
             })
-          ) ?? []
-      })) ?? []
-  }));
+        }))
+        .sort((a, b) => {
+          if (typeof a.position === "number" && typeof b.position === "number") return a.position - b.position;
+          return a.title.localeCompare(b.title);
+        })
+  }))
+  .sort((a, b) => {
+    if (typeof a.position === "number" && typeof b.position === "number") return a.position - b.position;
+    return a.title.localeCompare(b.title);
+  });
+
+  return normalized;
 }
 
 export function generateLinkId(folder: string, resourceTitle: string, label: string) {
   return slugify(`${folder}-${resourceTitle}-${label}-link`);
+}
+
+// reorder helper: accepts arrays of ids and writes position values to DB
+export async function reorder(input: {
+  folders?: string[];
+  resources?: Array<{ folderId: string; resourceIds: string[] }>;
+  links?: Array<{ resourceId: string; linkIds: string[] }>;
+}) {
+  const supabase = getSupabaseAdminClient();
+  const updates: Promise<unknown>[] = [];
+
+  if (input.folders) {
+    input.folders.forEach((id, idx) => {
+      updates.push((async () => await supabase.from("resource_folders").update({ position: idx + 1 }).eq("id", id).select())());
+    });
+  }
+
+  if (input.resources) {
+    input.resources.forEach((group) => {
+      group.resourceIds.forEach((id, idx) => {
+        updates.push((async () => await supabase.from("resources").update({ position: idx + 1 }).eq("id", id).select())());
+      });
+    });
+  }
+
+  if (input.links) {
+    input.links.forEach((group) => {
+      group.linkIds.forEach((id, idx) => {
+        updates.push((async () => await supabase.from("resource_links").update({ position: idx + 1 }).eq("id", id).select())());
+      });
+    });
+  }
+
+  // Run updates in parallel and throw if any error occurs
+  const results = await Promise.all(updates);
+  interface SupabaseResult { error?: unknown | null }
+  for (const res of results) {
+    const r = res as SupabaseResult | undefined | null;
+    if (r?.error) {
+      throw r.error;
+    }
+  }
+
+  return readResources();
 }
 
 export function generateGtmLabel(folder: string, resourceTitle: string, label: string) {
@@ -95,7 +157,7 @@ export function generateGtmLabel(folder: string, resourceTitle: string, label: s
 export function normalizeLink(
   folder: string,
   resourceTitle: string,
-  link: { label: string; url: string; id?: string | null; gtmLabel?: string | null }
+  link: { label: string; url: string; id?: string | null; gtmLabel?: string | null; position?: number }
 ): ResourceLink {
   const label = link.label.trim();
   const url = link.url.trim();
@@ -103,7 +165,8 @@ export function normalizeLink(
     label,
     url,
     id: (link.id ?? generateLinkId(folder, resourceTitle, label)).trim(),
-    gtmLabel: (link.gtmLabel ?? generateGtmLabel(folder, resourceTitle, label)).trim()
+    gtmLabel: (link.gtmLabel ?? generateGtmLabel(folder, resourceTitle, label)).trim(),
+    position: typeof link.position === "number" ? link.position : undefined
   };
 }
 
@@ -139,11 +202,22 @@ export async function addResourceToSupabase(input: {
       throw new Error("Folder not found");
     }
 
+    // Determine next position for new folder
+    const { data: lastFolder } = await supabase
+      .from("resource_folders")
+      .select("position")
+      .order("position", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const nextFolderPosition = (lastFolder?.position ?? 0) + 1;
+
     const { data: newFolder, error: createFolderError } = await supabase
       .from("resource_folders")
       .insert({
         title: folderTitle,
-        default_open: input.defaultOpen ?? false
+        default_open: input.defaultOpen ?? false,
+        position: nextFolderPosition
       })
       .select("id")
       .single();
@@ -155,12 +229,24 @@ export async function addResourceToSupabase(input: {
     folderId = newFolder.id;
   }
 
+  // Determine next position for resource inside its folder
+  const { data: lastResource } = await supabase
+    .from("resources")
+    .select("position")
+    .eq("folder_id", folderId)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nextResourcePosition = (lastResource?.position ?? 0) + 1;
+
   const { data: newResource, error: resourceInsertError } = await supabase
     .from("resources")
     .insert({
       folder_id: folderId,
       title: resourceTitle,
-      description: input.resource.description.trim()
+      description: input.resource.description.trim(),
+      position: nextResourcePosition
     })
     .select("id")
     .single();
@@ -169,9 +255,10 @@ export async function addResourceToSupabase(input: {
     throw resourceInsertError;
   }
 
-  const normalizedLinks = input.resource.links.map((link) =>
-    normalizeLink(folderTitle, resourceTitle, link)
-  );
+  const normalizedLinks = input.resource.links.map((link, idx) => {
+    const l = normalizeLink(folderTitle, resourceTitle, link);
+    return { ...l, position: idx + 1 };
+  });
 
   const { error: linkInsertError } = await supabase.from("resource_links").insert(
     normalizedLinks.map((link) => ({
@@ -179,7 +266,8 @@ export async function addResourceToSupabase(input: {
       label: link.label,
       url: link.url,
       gtm_label: link.gtmLabel,
-      anchor_id: link.id
+      anchor_id: link.id,
+      position: link.position
     }))
   );
 
@@ -206,9 +294,10 @@ export async function updateResourceInSupabase(input: {
   const folderTitle = input.folderTitle.trim();
   const resourceTitle = input.resource.title.trim();
 
+  // Select existing resource with position and folder information
   const { data: existingResource, error: existingResourceError } = await supabase
     .from("resources")
-    .select("id")
+    .select("id, folder_id, position")
     .eq("id", input.resourceId)
     .maybeSingle();
 
@@ -237,11 +326,22 @@ export async function updateResourceInSupabase(input: {
       throw new Error("Folder not found");
     }
 
+    // Determine next position for new folder
+    const { data: lastFolder } = await supabase
+      .from("resource_folders")
+      .select("position")
+      .order("position", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const nextFolderPosition = (lastFolder?.position ?? 0) + 1;
+
     const { data: newFolder, error: createFolderError } = await supabase
       .from("resource_folders")
       .insert({
         title: folderTitle,
-        default_open: input.defaultOpen ?? false
+        default_open: input.defaultOpen ?? false,
+        position: nextFolderPosition
       })
       .select("id")
       .single();
@@ -253,13 +353,29 @@ export async function updateResourceInSupabase(input: {
     folderId = newFolder.id;
   }
 
+  // If folder changed, move the resource to the end of the new folder
+  const updatedFields: Record<string, unknown> = {
+    folder_id: folderId,
+    title: resourceTitle,
+    description: input.resource.description.trim()
+  };
+
+  if (existingResource.folder_id !== folderId) {
+    const { data: lastResource } = await supabase
+      .from("resources")
+      .select("position")
+      .eq("folder_id", folderId)
+      .order("position", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const nextResourcePosition = (lastResource?.position ?? 0) + 1;
+    (updatedFields as Record<string, unknown>).position = nextResourcePosition;
+  }
+
   const { error: resourceUpdateError } = await supabase
     .from("resources")
-    .update({
-      folder_id: folderId,
-      title: resourceTitle,
-      description: input.resource.description.trim()
-    })
+    .update(updatedFields)
     .eq("id", input.resourceId);
 
   if (resourceUpdateError) {
@@ -275,9 +391,10 @@ export async function updateResourceInSupabase(input: {
     throw deleteLinksError;
   }
 
-  const normalizedLinks = input.resource.links.map((link) =>
-    normalizeLink(folderTitle, resourceTitle, link)
-  );
+  const normalizedLinks = input.resource.links.map((link, idx) => {
+    const l = normalizeLink(folderTitle, resourceTitle, link);
+    return { ...l, position: idx + 1 };
+  });
 
   if (normalizedLinks.length > 0) {
     const { error: linkInsertError } = await supabase.from("resource_links").insert(
@@ -286,7 +403,8 @@ export async function updateResourceInSupabase(input: {
         label: link.label,
         url: link.url,
         gtm_label: link.gtmLabel,
-        anchor_id: link.id
+        anchor_id: link.id,
+        position: link.position
       }))
     );
 

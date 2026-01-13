@@ -154,6 +154,103 @@ export default function AdminResourcesPage() {
     }
   }
 
+  async function sendReorder(payload: { folders?: string[]; resources?: Array<{ folderId: string; resourceIds: string[] }>; links?: Array<{ resourceId: string; linkIds: string[] }> }) {
+    setFormError(null);
+    setSuccess(null);
+
+    if (!token.trim()) {
+      setFormError("Admin token is required to reorder.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const response = await fetch("/api/admin/resources", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token.trim()}`
+        },
+        body: JSON.stringify({ action: "reorder", ...payload })
+      });
+
+      if (!response.ok) {
+        const { error: message } = (await response.json()) as { error?: string };
+        throw new Error(message ?? "Failed to reorder resources.");
+      }
+
+      const data = (await response.json()) as { resources: ResourceFolder[] };
+      setResources(data.resources);
+      setSuccess("Order updated.");
+    } catch (err) {
+      setFormError((err as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function moveLinkUp(index: number) {
+    setLinks((prev) => {
+      const next = [...prev];
+      if (index <= 0) return prev;
+      [next[index - 1], next[index]] = [next[index], next[index - 1]];
+      return next;
+    });
+  }
+
+  function moveLinkDown(index: number) {
+    setLinks((prev) => {
+      const next = [...prev];
+      if (index >= next.length - 1) return prev;
+      [next[index + 1], next[index]] = [next[index], next[index + 1]];
+      return next;
+    });
+  }
+
+  function moveFolderUp(folderId?: string) {
+    if (!folderId) return;
+    const index = resources.findIndex((f) => f.id === folderId);
+    if (index <= 0) return;
+    const next = [...resources];
+    [next[index - 1], next[index]] = [next[index], next[index - 1]];
+    const folderIds = next.map((f) => f.id ?? "").filter(Boolean);
+    void sendReorder({ folders: folderIds });
+  }
+
+  function moveFolderDown(folderId?: string) {
+    if (!folderId) return;
+    const index = resources.findIndex((f) => f.id === folderId);
+    if (index === -1 || index >= resources.length - 1) return;
+    const next = [...resources];
+    [next[index + 1], next[index]] = [next[index], next[index + 1]];
+    const folderIds = next.map((f) => f.id ?? "").filter(Boolean);
+    void sendReorder({ folders: folderIds });
+  }
+
+  function moveResourceUp(folderId: string | undefined, resourceId: string | undefined) {
+    if (!folderId || !resourceId) return;
+    const folder = resources.find((f) => f.id === folderId);
+    if (!folder) return;
+    const idx = folder.resources.findIndex((r) => r.id === resourceId);
+    if (idx <= 0) return;
+    const nextResources = [...folder.resources];
+    [nextResources[idx - 1], nextResources[idx]] = [nextResources[idx], nextResources[idx - 1]];
+    const resourceIds = nextResources.map((r) => r.id ?? "").filter(Boolean);
+    void sendReorder({ resources: [{ folderId, resourceIds }] });
+  }
+
+  function moveResourceDown(folderId: string | undefined, resourceId: string | undefined) {
+    if (!folderId || !resourceId) return;
+    const folder = resources.find((f) => f.id === folderId);
+    if (!folder) return;
+    const idx = folder.resources.findIndex((r) => r.id === resourceId);
+    if (idx === -1 || idx >= folder.resources.length - 1) return;
+    const nextResources = [...folder.resources];
+    [nextResources[idx + 1], nextResources[idx]] = [nextResources[idx], nextResources[idx + 1]];
+    const resourceIds = nextResources.map((r) => r.id ?? "").filter(Boolean);
+    void sendReorder({ resources: [{ folderId, resourceIds }] });
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
@@ -429,15 +526,37 @@ export default function AdminResourcesPage() {
 
                 {links.map((link, index) => (
                   <div key={index} className="grid gap-2 border border-gray-200 rounded-xl p-3">
-                    <div className="grid gap-1">
-                      <label className="text-xs font-semibold text-gray-600">Link Label</label>
-                      <input
-                        type="text"
-                        value={link.label}
-                        onChange={(event) => handleLinkChange(index, "label", event.target.value)}
-                        placeholder="e.g. View Worksheet"
-                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                    <div className="flex gap-2">
+                      <div className="flex-1 grid gap-1">
+                        <label className="text-xs font-semibold text-gray-600">Link Label</label>
+                        <input
+                          type="text"
+                          value={link.label}
+                          onChange={(event) => handleLinkChange(index, "label", event.target.value)}
+                          placeholder="e.g. View Worksheet"
+                          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="flex flex-col items-start gap-1">
+                        <button
+                          type="button"
+                          onClick={() => moveLinkUp(index)}
+                          className="text-xs font-semibold text-gray-600 hover:text-gray-800"
+                          disabled={index === 0}
+                          aria-label="Move link up"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveLinkDown(index)}
+                          className="text-xs font-semibold text-gray-600 hover:text-gray-800"
+                          disabled={index === links.length - 1}
+                          aria-label="Move link down"
+                        >
+                          ▼
+                        </button>
+                      </div>
                     </div>
                     <div className="grid gap-1">
                       <label className="text-xs font-semibold text-gray-600">Google Drive URL</label>
@@ -514,9 +633,29 @@ export default function AdminResourcesPage() {
                             <p className="text-xs text-gray-500">Opens by default on the resources page</p>
                           ) : null}
                         </div>
-                        <span className="text-xs text-gray-500">
-                          {folder.resources.length} {folder.resources.length === 1 ? "item" : "items"}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <div className="flex flex-col items-end mr-2">
+                            <button
+                              type="button"
+                              onClick={() => moveFolderUp(folder.id)}
+                              className="text-xs font-semibold text-gray-600 hover:text-gray-800"
+                              disabled={submitting || !folder.id}
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveFolderDown(folder.id)}
+                              className="text-xs font-semibold text-gray-600 hover:text-gray-800"
+                              disabled={submitting || !folder.id}
+                            >
+                              ▼
+                            </button>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {folder.resources.length} {folder.resources.length === 1 ? "item" : "items"}
+                          </span>
+                        </div>
                       </div>
                       {folder.resources.length === 0 ? (
                         <p className="text-xs text-gray-500">No worksheets yet.</p>
@@ -536,8 +675,37 @@ export default function AdminResourcesPage() {
                                   <div>
                                     <p className="text-sm font-medium text-gray-900">{resource.title}</p>
                                     <p className="text-xs text-gray-600 mt-1">{resource.description}</p>
+                                    {resource.links?.length ? (
+                                      <div className="flex flex-wrap gap-2 mt-2">
+                                        {resource.links.map((l) => (
+                                          <span key={l.id} className="text-xs text-gray-600 bg-gray-100 rounded px-2 py-1">
+                                            {l.label}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : null}
                                   </div>
                                   <div className="flex items-center gap-3 shrink-0">
+                                    <div className="flex flex-col mr-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => moveResourceUp(folder.id, resource.id)}
+                                        className="text-xs font-semibold text-gray-600 hover:text-gray-800"
+                                        disabled={submitting || !resource.id}
+                                        aria-label="Move up"
+                                      >
+                                        ▲
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => moveResourceDown(folder.id, resource.id)}
+                                        className="text-xs font-semibold text-gray-600 hover:text-gray-800"
+                                        disabled={submitting || !resource.id}
+                                        aria-label="Move down"
+                                      >
+                                        ▼
+                                      </button>
+                                    </div>
                                     <button
                                       type="button"
                                       onClick={() => startEditing(folder, resource)}

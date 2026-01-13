@@ -23,18 +23,31 @@ export default async function ResourcesPage() {
         </div>
 
         <div className="max-w-5xl mx-auto flex flex-col gap-6">
-          {resources.map((folder, folderIndex) => (
-            <ResourceFolder key={folderIndex} title={folder.title} defaultOpen={folder.defaultOpen}>
-              {folder.resources.map((resource, resourceIndex) => (
-                <ResourceCard
-                  key={resourceIndex}
-                  title={resource.title}
-                  description={resource.description}
-                  links={resource.links}
-                />
-              ))}
-            </ResourceFolder>
-          ))}
+          {resources
+            // Ensure folders are ordered by position then title as a safe fallback
+            .slice()
+            .sort((a, b) => {
+              if (typeof a.position === "number" && typeof b.position === "number") return a.position - b.position;
+              return a.title.localeCompare(b.title);
+            })
+            .map((folder) => (
+              <ResourceFolder key={folder.id ?? folder.title} title={folder.title} defaultOpen={folder.defaultOpen}>
+                {folder.resources
+                  .slice()
+                  .sort((x, y) => {
+                    if (typeof x.position === "number" && typeof y.position === "number") return x.position - y.position;
+                    return x.title.localeCompare(y.title);
+                  })
+                  .map((resource) => (
+                    <ResourceCard
+                      key={resource.id ?? resource.title}
+                      title={resource.title}
+                      description={resource.description}
+                      links={resource.links}
+                    />
+                  ))}
+              </ResourceFolder>
+            ))}
         </div>
       </section>
     </main>
