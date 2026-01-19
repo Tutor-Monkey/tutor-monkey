@@ -15,7 +15,7 @@ export const LINKS = {
   ishaanNirmalImage: "https://4wqhelux5g89r4e4.public.blob.vercel-storage.com/pfps/ishaan-pfp.png",
   andyLeeImage: "https://4wqhelux5g89r4e4.public.blob.vercel-storage.com/pfps/andy-pfp.jpg",
   samLuongImage: "https://4wqhelux5g89r4e4.public.blob.vercel-storage.com/pfps/sam-luong-pfp.jpg",
-
+  collinCuiImage : "https://4wqhelux5g89r4e4.public.blob.vercel-storage.com/pfps/collin-cui-pfp.jpg",
 
   // Form Links
   apPrecalSignup: "https://forms.gle/S3i3wDbUvqswcPbM8",

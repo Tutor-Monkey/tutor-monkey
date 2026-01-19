@@ -99,6 +99,7 @@ export default function TutorsPage() {
       subjects: ["Community Outreach", "Partnerships"],
       quote: "Community connections power our mission to reach more students.",
       rating: 5,
+      image: LINKS.collinCuiImage,
       achievements: ["Plano West Outreach Lead", "National Honor Society Volunteer"],
       roles: ["Outreach"],
     },

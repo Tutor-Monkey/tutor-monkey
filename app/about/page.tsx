@@ -102,6 +102,48 @@ export default function AboutPage() {
           </motion.div>
         </motion.section>
 
+        {/* Nonprofit Documentation */}
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 1.6 }}
+          className="py-20 px-6 bg-white"
+        >
+          <div className="max-w-6xl mx-auto">
+            <div className="flex flex-col lg:flex-row gap-12 items-start">
+              <div className="lg:w-1/2">
+                <h2 className="text-4xl font-light text-gray-900 mb-6 font-display">Nonprofit documentation</h2>
+                <p className="text-lg text-gray-600 mb-6 font-light">
+                  Tutor Monkey operates as a nonprofit with fiscal sponsorship through Hack Club (HCB).
+                  You can review our official documentation and support our mission directly.
+                </p>
+                <a
+                  href="https://hcb.hackclub.com/tutor-monkey/fiscal_sponsorship_letter.pdf"
+                  className="text-gray-900 underline decoration-gray-400 underline-offset-4 hover:text-gray-700 transition-colors"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Fiscal sponsorship letter (PDF)
+                </a>
+              </div>
+              <div className="lg:w-1/2 flex justify-center">
+                <iframe
+                  src="https://hcb.hackclub.com/donations/start/tutor-monkey"
+                  title="Tutor Monkey donation form"
+                  style={{ border: 'none' }}
+                  name="donateFrame"
+                  scrolling="yes"
+                  frameBorder="0"
+                  marginHeight={0}
+                  marginWidth={0}
+                  allowFullScreen
+                  className="w-full max-w-[480px] min-h-[520px] rounded-xl shadow-sm"
+                />
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
         {/* Values Section */}
         <motion.section 
           initial={{ opacity: 0, y: 20 }}
