@@ -33,7 +33,7 @@ export default function TutorsPage() {
       rating: 5,
       image: LINKS.sanjitKondaImage,
       achievements: ["AP Calculus BC", "Perfect PSAT Math", "Science Fair Winner"],
-      roles: ["Tutor", "Founder", "Logistics"],
+      roles: ["Tutor", "Founder", "Logistics", "Webmaster"],
     },
     {
       name: "James Chen",
