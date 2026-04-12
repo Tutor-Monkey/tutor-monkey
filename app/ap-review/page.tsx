@@ -36,6 +36,22 @@ const reviewOptions: ReviewOption[] = [
     csvPath: '/ap_calculus_bc_questions.csv',
     questionCount: 405,
   },
+  {
+    id: 'ap-computer-science-a',
+    title: 'AP Computer Science A',
+    description: '334 practice questions',
+    subtitle: 'Practice AP Computer Science A with detailed explanations and progress tracking.',
+    csvPath: '/ap_computer_science_a_questions.csv',
+    questionCount: 334,
+  },
+  {
+    id: 'ap-physics-1',
+    title: 'AP Physics 1',
+    description: '462 practice questions',
+    subtitle: 'Practice AP Physics 1 with detailed explanations and progress tracking.',
+    csvPath: '/ap_physics_1_questions.csv',
+    questionCount: 462,
+  },
 ];
 
 function APReviewQuiz({ review, onBack }: { review: ReviewOption; onBack: () => void }) {
