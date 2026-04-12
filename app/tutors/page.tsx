@@ -141,6 +141,18 @@ export default function TutorsPage() {
       achievements: ["Perfect PSAT Math", "Taking 8 AP Classes", ""],
       roles: ["Tutor", "Education"],
     },
+    {
+      name: "Matthew Xie",
+      school: "Junior at Plano West",
+      subjects: ["Mathematics", "Computer Science", "Physics"],
+      quote:
+        "Creating a supportive learning environment is key to unlocking a student's potential.",
+      rating: 5,
+      image: LINKS.matthewXieImage,
+      achievements: ["USACO Gold", "USAPhO top 400", "Perfect PSAT Math"],
+      roles: ["Tutor", "Education"],
+    }
+
   ];
 
   const memberSections = [
