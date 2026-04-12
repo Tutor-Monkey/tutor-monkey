@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   QuizQuestion,
   QuizState,
-  parseCsvText,
   calculateStats,
   saveQuizProgress,
   loadQuizProgress,
@@ -26,7 +25,7 @@ export interface UseQuizReturn {
   resetProgress: () => void;
 }
 
-export function useQuiz(csvPath: string, classType: string): UseQuizReturn {
+export function useQuiz(quizPath: string, classType: string): UseQuizReturn {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,12 +36,11 @@ export function useQuiz(csvPath: string, classType: string): UseQuizReturn {
   useEffect(() => {
     async function loadQuiz() {
       try {
-        const response = await fetch(csvPath);
+        const response = await fetch(quizPath, { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`Failed to load quiz: ${response.status}`);
         }
-        const csvText = await response.text();
-        const parsedQuestions = parseCsvText(csvText, classType);
+        const parsedQuestions = (await response.json()) as QuizQuestion[];
 
         if (!parsedQuestions.length) {
           throw new Error('No questions found in quiz file');
@@ -69,7 +67,7 @@ export function useQuiz(csvPath: string, classType: string): UseQuizReturn {
     }
 
     loadQuiz();
-  }, [csvPath, classType]);
+  }, [quizPath, classType]);
 
   const saveAnswer = useCallback(
     (questionNumber: number, answer: string) => {

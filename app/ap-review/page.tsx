@@ -15,7 +15,7 @@ interface ReviewOption {
   title: string;
   description: string;
   subtitle: string;
-  csvPath: string;
+  quizPath: string;
   questionCount: number;
 }
 
@@ -25,7 +25,7 @@ const reviewOptions: ReviewOption[] = [
     title: 'AP Statistics',
     description: '678 practice questions',
     subtitle: 'Practice AP Statistics with detailed explanations and progress tracking.',
-    csvPath: '/ap_statistics_questions.csv',
+    quizPath: '/api/quizzes/ap-statistics',
     questionCount: 678,
   },
   {
@@ -33,7 +33,7 @@ const reviewOptions: ReviewOption[] = [
     title: 'AP Calculus BC',
     description: '405 practice questions',
     subtitle: 'Practice AP Calculus BC with detailed explanations and progress tracking.',
-    csvPath: '/ap_calculus_bc_questions.csv',
+    quizPath: '/api/quizzes/ap-calculus-bc',
     questionCount: 405,
   },
   {
@@ -41,7 +41,7 @@ const reviewOptions: ReviewOption[] = [
     title: 'AP Computer Science A',
     description: '334 practice questions',
     subtitle: 'Practice AP Computer Science A with detailed explanations and progress tracking.',
-    csvPath: '/ap_computer_science_a_questions.csv',
+    quizPath: '/api/quizzes/ap-computer-science-a',
     questionCount: 334,
   },
   {
@@ -49,14 +49,15 @@ const reviewOptions: ReviewOption[] = [
     title: 'AP Physics 1',
     description: '462 practice questions',
     subtitle: 'Practice AP Physics 1 with detailed explanations and progress tracking.',
-    csvPath: '/ap_physics_1_questions.csv',
+    quizPath: '/api/quizzes/ap-physics-1',
     questionCount: 462,
   },
 ];
 
 function APReviewQuiz({ review, onBack }: { review: ReviewOption; onBack: () => void }) {
   const [showFeedback, setShowFeedback] = useState(false);
-  const quiz = useQuiz(review.csvPath, review.id);
+  const [direction, setDirection] = useState<1 | -1>(1);
+  const quiz = useQuiz(review.quizPath, review.id);
 
   if (quiz.loading) {
     return (
@@ -144,9 +145,9 @@ function APReviewQuiz({ review, onBack }: { review: ReviewOption; onBack: () => 
           <AnimatePresence mode="wait">
             <motion.div
               key={`q-${currentQuestion.questionNumber}`}
-              initial={{ opacity: 0, x: 16 }}
+              initial={{ opacity: 0, x: direction * 16 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -16 }}
+              exit={{ opacity: 0, x: direction * -16 }}
               transition={{ duration: 0.2 }}
               className="h-full"
             >
@@ -190,11 +191,23 @@ function APReviewQuiz({ review, onBack }: { review: ReviewOption; onBack: () => 
             totalQuestions={quiz.questions.length}
             correct={quiz.stats.correct}
             answered={quiz.stats.answered}
-            onPrev={quiz.prevQuestion}
-            onNext={quiz.nextQuestion}
-            onRandom={quiz.randomQuestion}
+            onPrev={() => {
+              setDirection(-1);
+              quiz.prevQuestion();
+            }}
+            onNext={() => {
+              setDirection(1);
+              quiz.nextQuestion();
+            }}
+            onRandom={() => {
+              setDirection(1);
+              quiz.randomQuestion();
+            }}
             onReset={() => { quiz.resetProgress(); setShowFeedback(false); }}
-            onGoToQuestion={quiz.goToQuestion}
+            onGoToQuestion={(index) => {
+              setDirection(index < quiz.currentIndex ? -1 : 1);
+              quiz.goToQuestion(index);
+            }}
           />
           <span className="text-xs text-gray-400 hidden sm:block">
             {quiz.stats.correct} correct
