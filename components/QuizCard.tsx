@@ -21,6 +21,94 @@ export default function QuizCard({
   const answered = !!selectedAnswer;
 
   const imageTokenPattern = /\[Image:\s*([^\]]+)\]/gi;
+  const inverseTrigPattern = /\b(sin|cos|tan|sec|csc|cot)-1\b/g;
+  const exponentTokenPattern = /\be((?:ln|sin|cos|tan|sec|csc|cot|pi|[xyztnuvwmckXYZTNUVWMCK\d])+)\b/g;
+  const variablePowerPattern = /([A-Za-z])(\d+)\b/g;
+  const caretGroupedExponentPattern = /([A-Za-z])\^\(([^)]+)\)/g;
+  const caretNumericExponentPattern = /([A-Za-z])\^(\d+)/g;
+  const caretAlphaExponentPattern = /([A-Za-z])\^([A-Za-z]+)/g;
+
+  const renderFormattedText = (text: string, keyPrefix: string) => {
+    const normalized = text.replace(variablePowerPattern, '$1^$2');
+    const nodes: React.ReactNode[] = [];
+    let cursor = 0;
+    let keyIndex = 0;
+
+    const pushPlainText = (value: string) => {
+      if (!value) return;
+
+      let localCursor = 0;
+      const combinedPattern = new RegExp(
+        `${inverseTrigPattern.source}|${caretGroupedExponentPattern.source}|${caretNumericExponentPattern.source}|${caretAlphaExponentPattern.source}`,
+        'g',
+      );
+      let specialMatch: RegExpExecArray | null;
+
+      while ((specialMatch = combinedPattern.exec(value)) !== null) {
+        const [fullMatch, trigName, groupedBase, groupedExponent, numericBase, numericExponent, alphaBase, alphaExponent] = specialMatch;
+        const before = value.slice(localCursor, specialMatch.index);
+        if (before) {
+          nodes.push(<React.Fragment key={`${keyPrefix}-plain-${keyIndex++}`}>{before}</React.Fragment>);
+        }
+
+        if (trigName) {
+          nodes.push(
+            <React.Fragment key={`${keyPrefix}-inv-${keyIndex++}`}>
+              {trigName}
+              <sup>-1</sup>
+            </React.Fragment>,
+          );
+        } else if (groupedBase) {
+          nodes.push(
+            <React.Fragment key={`${keyPrefix}-sup-${keyIndex++}`}>
+              {groupedBase}
+              <sup>{groupedExponent}</sup>
+            </React.Fragment>,
+          );
+        } else if (numericBase) {
+          nodes.push(
+            <React.Fragment key={`${keyPrefix}-sup-${keyIndex++}`}>
+              {numericBase}
+              <sup>{numericExponent}</sup>
+            </React.Fragment>,
+          );
+        } else if (alphaBase) {
+          nodes.push(
+            <React.Fragment key={`${keyPrefix}-sup-${keyIndex++}`}>
+              {alphaBase}
+              <sup>{alphaExponent}</sup>
+            </React.Fragment>,
+          );
+        }
+
+        localCursor = specialMatch.index + fullMatch.length;
+      }
+
+      const tail = value.slice(localCursor);
+      if (tail) {
+        nodes.push(<React.Fragment key={`${keyPrefix}-plain-${keyIndex++}`}>{tail}</React.Fragment>);
+      }
+    };
+
+    exponentTokenPattern.lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = exponentTokenPattern.exec(normalized)) !== null) {
+      const [fullMatch, exponent] = match;
+      const before = normalized.slice(cursor, match.index);
+      pushPlainText(before);
+
+      nodes.push(
+        <React.Fragment key={`${keyPrefix}-exp-${keyIndex++}`}>
+          e<sup>{exponent}</sup>
+        </React.Fragment>,
+      );
+      cursor = match.index + fullMatch.length;
+    }
+
+    pushPlainText(normalized.slice(cursor));
+    return nodes;
+  };
 
   const renderTextWithImages = (
     text: string | undefined,
@@ -46,7 +134,7 @@ export default function QuizCard({
       if (before) {
         content.push(
           <span key={`${altPrefix}-text-${lastIndex}`} className={textClassName}>
-            {before}
+            {renderFormattedText(before, `${altPrefix}-text-${lastIndex}`)}
           </span>,
         );
       }
@@ -77,7 +165,7 @@ export default function QuizCard({
     if (after) {
       content.push(
         <span key={`${altPrefix}-text-end`} className={textClassName}>
-          {after}
+          {renderFormattedText(after, `${altPrefix}-text-end`)}
         </span>,
       );
     }
