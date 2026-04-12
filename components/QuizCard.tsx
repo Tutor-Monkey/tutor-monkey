@@ -59,7 +59,7 @@ export default function QuizCard({
                 key={idx}
                 src={src}
                 alt={`Question ${question.questionNumber} image ${idx + 1}`}
-                className="max-w-full h-auto rounded-xl border border-gray-200"
+                className="max-w-full h-auto border border-gray-200"
               />
             ))}
           </div>
@@ -108,7 +108,7 @@ export default function QuizCard({
                     >
                       {choice.key}.
                     </span>
-                    <span className="text-sm text-gray-800 break-words">{choice.text}</span>
+                    <span className="text-sm text-gray-800 break-words">{cleanText(choice.text)}</span>
                   </div>
 
                   {choice.imageUrls?.length ? (
@@ -118,7 +118,7 @@ export default function QuizCard({
                           key={idx}
                           src={src}
                           alt={`Choice ${choice.key} image`}
-                          className="max-w-full h-auto rounded-lg border border-gray-200"
+                          className="max-w-full h-auto border border-gray-200"
                         />
                       ))}
                     </div>
@@ -144,7 +144,7 @@ export default function QuizCard({
               {isCorrect ? '✓ Correct!' : `✕ Incorrect — answer is ${question.correctAnswer}.`}
             </p>
             {question.correctChoiceText && (
-              <p className="mb-2 text-gray-700">{question.correctChoiceText}</p>
+              <p className="mb-2 text-gray-700">{cleanText(question.correctChoiceText)}</p>
             )}
             {question.explanation && (
               <div className="text-gray-700">
