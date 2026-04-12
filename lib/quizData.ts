@@ -13,6 +13,7 @@ export interface QuizChoice {
 export interface QuizQuestion {
   questionNumber: number;
   class: 'ap-statistics' | 'ap-calculus' | 'ap-biology' | string;
+  topic?: string;
   url?: string;
   questionText: string;
   questionImageUrls?: string[];
@@ -140,6 +141,9 @@ function normalizeQuestion(
   const questionNumber = parseInt(record['question_number'] || '', 10);
   if (!questionNumber || isNaN(questionNumber)) return null;
 
+  const topic = record['topic']?.trim();
+  if (shouldExcludeQuestion(className, topic)) return null;
+
   const choiceKeys = ['A', 'B', 'C', 'D', 'E'];
   const choices: QuizChoice[] = [];
 
@@ -156,6 +160,7 @@ function normalizeQuestion(
   return {
     questionNumber,
     class: className,
+    topic: topic || undefined,
     url: record['url'] || undefined,
     questionText: record['question'] || '',
     questionImageUrls: parseImageUrls(record['question_image_urls'] || ''),
@@ -166,6 +171,21 @@ function normalizeQuestion(
     explanationImageUrls: parseImageUrls(record['explanation_image_urls'] || ''),
   };
 }
+
+function shouldExcludeQuestion(
+  className: QuizQuestion['class'],
+  topic: string | undefined,
+) {
+  if (className !== 'ap-physics-1' || !topic) return false;
+
+  return PHYSICS_1_EXCLUDED_TOPICS.has(topic);
+}
+
+const PHYSICS_1_EXCLUDED_TOPICS = new Set([
+  'Waves',
+  'Electric Forces and Fields',
+  'Direct Current Circuits',
+]);
 
 function parseImageUrls(value: string): string[] {
   return value

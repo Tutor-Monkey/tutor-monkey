@@ -47,10 +47,10 @@ const reviewOptions: ReviewOption[] = [
   {
     id: 'ap-physics-1',
     title: 'AP Physics 1',
-    description: '462 practice questions',
-    subtitle: 'Practice AP Physics 1 with detailed explanations and progress tracking.',
+    description: '333 practice questions',
+    subtitle: 'Practice AP Physics 1 with current exam topics, detailed explanations, and progress tracking.',
     quizPath: '/api/quizzes/ap-physics-1',
-    questionCount: 462,
+    questionCount: 333,
   },
 ];
 
