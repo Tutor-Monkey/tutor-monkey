@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import React from "react";
+import React, { useState } from "react";
 import Navigation from "@/components/Navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsClient } from "@/hooks/useIsClient";
@@ -10,6 +10,7 @@ import Footer from "@/components/Footer";
 
 export default function ContactPage() {
   const isClient = useIsClient?.() ?? true;
+  const [openFaq, setOpenFaq] = useState<string | null>(null);
 
   // Animation variants
   const fadeInUp = {
@@ -148,7 +149,7 @@ export default function ContactPage() {
                   {
                     q: 'Is tutoring free? What about donations?',
                     a:
-                      'Tutoring is free for all students. We suggest a $20 per hour donation to support our mission and help pay tutors. Donations are optional and tax‑deductible through our fiscal sponsor (Hack Club).',
+                      'Tutoring is free for all students. We suggest a $20 per hour donation to help us reach more students and host community events. Donations are optional and tax‑deductible through our fiscal sponsor (Hack Club).',
                   },
                   {
                     q: 'Do I have to donate to receive tutoring?',
@@ -175,18 +176,49 @@ export default function ContactPage() {
                     a:
                       'We offer tutoring in all major subjects including Mathematics, Science, English, History, Test Preparation, and Computer Science. All tutoring is aligned with Plano ISD curriculum.',
                   },
-                ].map((item, i) => (
+                ].map((item, i) => {
+                  const isOpen = openFaq === item.q;
+
+                  return (
                   <motion.div
                     key={item.q}
-                    className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100"
+                    className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm"
                     variants={fadeInUp}
                     transition={{ duration: 0.45, delay: i * 0.08 }}
                     exit={{ opacity: 0, y: 8 }}
                   >
-                    <h3 className="text-xl font-medium text-gray-900 mb-4 font-display">{item.q}</h3>
-                    <p className="text-gray-600 font-light">{item.a}</p>
+                    <button
+                      type="button"
+                      onClick={() => setOpenFaq(isOpen ? null : item.q)}
+                      className="flex w-full items-center justify-between gap-4 p-6 text-left"
+                      aria-expanded={isOpen}
+                    >
+                      <h3 className="text-xl font-medium text-gray-900 font-display">{item.q}</h3>
+                      <span
+                        className={`shrink-0 text-2xl leading-none text-gray-500 transition-transform duration-200 ${isOpen ? "rotate-45" : ""}`}
+                        aria-hidden="true"
+                      >
+                        +
+                      </span>
+                    </button>
+
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: "easeOut" }}
+                        >
+                          <div className="px-6 pb-6">
+                            <p className="text-gray-600 font-light">{item.a}</p>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </motion.div>
-                ))}
+                  );
+                })}
               </AnimatePresence>
             </motion.div>
           </div>

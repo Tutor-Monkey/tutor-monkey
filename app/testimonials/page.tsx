@@ -151,10 +151,9 @@ export default function TestimonialsPage() {
               </h2>
             </motion.div>
             
-            <div className="grid md:grid-cols-3 gap-8">
+            <div className="grid md:grid-cols-2 gap-8">
               {[
                 { number: "600+", label: "Students Helped" },
-                { number: "5.0", label: "Average Rating" },
                 { number: "400+", label: "Hours of Tutoring" }
               ].map((stat, index) => (
                 <motion.div 
