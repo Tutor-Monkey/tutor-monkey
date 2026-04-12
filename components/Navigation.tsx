@@ -50,6 +50,7 @@ export default function Navigation() {
               <Link href="/about" className="hover:opacity-80 transition-opacity">About</Link>
               <Link href="/contact" className="hover:opacity-80 transition-opacity">Contact</Link>
               <Link href="/resources" className="hover:opacity-80 transition-opacity">Resources</Link>
+              <Link href="/ap-review" className="hover:opacity-80 transition-opacity">AP Review</Link>
             </div>
 
             {/* Desktop CTA */}
@@ -90,6 +91,7 @@ export default function Navigation() {
                   <Link href="/about" className="block rounded-lg px-2 py-2 hover:bg-white/10" onClick={() => setOpen(false)}>About</Link>
                   <Link href="/contact" className="block rounded-lg px-2 py-2 hover:bg-white/10" onClick={() => setOpen(false)}>Contact</Link>
                   <Link href="/resources" className="block rounded-lg px-2 py-2 hover:bg-white/10" onClick={() => setOpen(false)}>Resources</Link>
+                  <Link href="/ap-review" className="block rounded-lg px-2 py-2 hover:bg-white/10" onClick={() => setOpen(false)}>AP Review</Link>
                   <Link href="/book" className="mt-1 inline-flex items-center justify-center rounded-full border border-white/40 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20" onClick={() => setOpen(false)}>Book a session</Link>
                 </div>
               </motion.div>
