@@ -221,10 +221,10 @@ export default function APReviewPage() {
       <Navigation />
       <section className="max-w-4xl mx-auto px-4 sm:px-6 py-28">
         <div className="rounded-2xl border border-gray-200 bg-white px-6 sm:px-10 py-10 shadow-sm">
-          <p className="text-xs uppercase tracking-widest text-gray-400 mb-2">AP Reviews</p>
-          <h1 className="text-3xl font-light text-gray-900 mb-3 font-display">Choose a review to begin</h1>
+          <p className="text-xs uppercase tracking-widest text-blue-600 mb-2">New AP Reviews</p>
+          <h1 className="text-3xl font-light text-gray-900 mb-3 font-display">1,000+ AP practice questions now live</h1>
           <p className="text-gray-500 mb-8">
-            Select the AP review you want to study, and start practicing with hundreds of questions and detailed explanations.
+            Explore AP Statistics, AP Calculus BC, AP Computer Science A, and AP Physics 1 with detailed explanations and progress tracking.
           </p>
 
           <div className="grid gap-4 sm:grid-cols-2">
