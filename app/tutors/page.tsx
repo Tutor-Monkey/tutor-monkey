@@ -149,7 +149,7 @@ export default function TutorsPage() {
         "Creating a supportive learning environment is key to unlocking a student's potential.",
       rating: 5,
       image: LINKS.matthewXieImage,
-      achievements: ["USACO Gold", "USAPhO top 400", "Perfect PSAT Math"],
+      achievements: ["USACO Platinum", "F=ma top 400", "Perfect PSAT Math"],
       roles: ["Tutor", "Education"],
     }
 
