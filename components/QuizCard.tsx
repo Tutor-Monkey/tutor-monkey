@@ -20,8 +20,85 @@ export default function QuizCard({
   const isCorrect = selectedAnswer === question.correctAnswer;
   const answered = !!selectedAnswer;
 
-  const cleanText = (text: string) =>
-    text.replace(/\[Image:[^\]]+\]/gi, '').trim();
+  const imageTokenPattern = /\[Image:\s*([^\]]+)\]/gi;
+
+  const renderTextWithImages = (
+    text: string | undefined,
+    imageUrls: string[] | undefined,
+    altPrefix: string,
+    textClassName: string,
+  ) => {
+    const sourceText = text?.trim() ?? '';
+    const fallbackUrls = imageUrls ?? [];
+    const usedUrls = new Set<string>();
+    const content: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let imageCount = 0;
+    let match: RegExpExecArray | null;
+
+    imageTokenPattern.lastIndex = 0;
+
+    while ((match = imageTokenPattern.exec(sourceText)) !== null) {
+      const [token, rawUrl] = match;
+      const before = sourceText.slice(lastIndex, match.index);
+      const imageUrl = rawUrl.trim();
+
+      if (before) {
+        content.push(
+          <span key={`${altPrefix}-text-${lastIndex}`} className={textClassName}>
+            {before}
+          </span>,
+        );
+      }
+
+      if (imageUrl) {
+        usedUrls.add(imageUrl);
+        imageCount += 1;
+        content.push(
+          <img
+            key={`${altPrefix}-image-${match.index}`}
+            src={imageUrl}
+            alt={`${altPrefix} image ${imageCount}`}
+            className="inline-block max-w-full h-auto align-middle my-1"
+          />,
+        );
+      } else {
+        content.push(
+          <span key={`${altPrefix}-token-${match.index}`} className={textClassName}>
+            {token}
+          </span>,
+        );
+      }
+
+      lastIndex = match.index + token.length;
+    }
+
+    const after = sourceText.slice(lastIndex);
+    if (after) {
+      content.push(
+        <span key={`${altPrefix}-text-end`} className={textClassName}>
+          {after}
+        </span>,
+      );
+    }
+
+    fallbackUrls
+      .filter((url) => url && !usedUrls.has(url))
+      .forEach((url, index) => {
+        content.push(
+          <img
+            key={`${altPrefix}-fallback-${url}-${index}`}
+            src={url}
+            alt={`${altPrefix} image ${imageCount + index + 1}`}
+            className="inline-block max-w-full h-auto align-middle my-1"
+          />,
+        );
+      });
+
+    if (content.length === 0) return null;
+
+    return <span className="whitespace-pre-wrap break-words">{content}</span>;
+  };
 
   return (
     <div className="h-full rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden grid lg:grid-cols-[3fr_2fr]">
@@ -48,22 +125,14 @@ export default function QuizCard({
           </span>
         </div>
 
-        <p className="text-base md:text-lg font-medium text-gray-900 leading-relaxed">
-          {cleanText(question.questionText)}
-        </p>
-
-        {question.questionImageUrls?.length ? (
-          <div className="mt-5 space-y-3">
-            {question.questionImageUrls.map((src, idx) => (
-              <img
-                key={idx}
-                src={src}
-                alt={`Question ${question.questionNumber} image ${idx + 1}`}
-                className="max-w-full h-auto border border-gray-200"
-              />
-            ))}
-          </div>
-        ) : null}
+        <div className="text-base md:text-lg font-medium text-gray-900 leading-relaxed">
+          {renderTextWithImages(
+            question.questionText,
+            question.questionImageUrls,
+            `Question ${question.questionNumber}`,
+            'text-inherit',
+          )}
+        </div>
       </div>
 
       {/* Right: answers — scrolls independently */}
@@ -108,21 +177,15 @@ export default function QuizCard({
                     >
                       {choice.key}.
                     </span>
-                    <span className="text-sm text-gray-800 break-words">{cleanText(choice.text)}</span>
-                  </div>
-
-                  {choice.imageUrls?.length ? (
-                    <div className="mt-2 space-y-2">
-                      {choice.imageUrls.map((src, idx) => (
-                        <img
-                          key={idx}
-                          src={src}
-                          alt={`Choice ${choice.key} image`}
-                          className="max-w-full h-auto border border-gray-200"
-                        />
-                      ))}
+                    <div className="text-sm text-gray-800 break-words">
+                      {renderTextWithImages(
+                        choice.text,
+                        choice.imageUrls,
+                        `Choice ${choice.key}`,
+                        'text-inherit',
+                      )}
                     </div>
-                  ) : null}
+                  </div>
                 </div>
               </label>
             );
@@ -144,26 +207,28 @@ export default function QuizCard({
               {isCorrect ? '✓ Correct!' : `✕ Incorrect — answer is ${question.correctAnswer}.`}
             </p>
             {question.correctChoiceText && (
-              <p className="mb-2 text-gray-700">{cleanText(question.correctChoiceText)}</p>
+              <div className="mb-2 text-gray-700">
+                {renderTextWithImages(
+                  question.correctChoiceText,
+                  undefined,
+                  'Correct choice',
+                  'text-inherit',
+                )}
+              </div>
             )}
             {question.explanation && (
               <div className="text-gray-700">
                 <p className="font-semibold mb-1">Explanation:</p>
-                <p>{cleanText(question.explanation)}</p>
+                <div>
+                  {renderTextWithImages(
+                    question.explanation,
+                    question.explanationImageUrls,
+                    'Explanation',
+                    'text-inherit',
+                  )}
+                </div>
               </div>
             )}
-            {question.explanationImageUrls?.length ? (
-              <div className="mt-3 space-y-2">
-                {question.explanationImageUrls.map((src, idx) => (
-                  <img
-                    key={idx}
-                    src={src}
-                    alt={`Explanation image ${idx + 1}`}
-                    className="max-w-full h-auto border border-gray-200"
-                  />
-                ))}
-              </div>
-            ) : null}
           </motion.div>
         )}
       </div>

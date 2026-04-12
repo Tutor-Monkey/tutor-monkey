@@ -10,19 +10,37 @@ import { useQuiz } from '@/hooks/useQuiz';
 import { useIsClient } from '@/hooks/useIsClient';
 import { ChevronLeft } from 'lucide-react';
 
-const reviewOptions = [
+interface ReviewOption {
+  id: string;
+  title: string;
+  description: string;
+  subtitle: string;
+  csvPath: string;
+  questionCount: number;
+}
+
+const reviewOptions: ReviewOption[] = [
   {
     id: 'ap-statistics',
     title: 'AP Statistics',
     description: '678 practice questions',
     subtitle: 'Practice AP Statistics with detailed explanations and progress tracking.',
     csvPath: '/ap_statistics_questions.csv',
+    questionCount: 678,
+  },
+  {
+    id: 'ap-calculus-bc',
+    title: 'AP Calculus BC',
+    description: '405 practice questions',
+    subtitle: 'Practice AP Calculus BC with detailed explanations and progress tracking.',
+    csvPath: '/ap_calculus_bc_questions.csv',
+    questionCount: 405,
   },
 ];
 
-function APReviewQuiz({ onBack }: { onBack: () => void }) {
+function APReviewQuiz({ review, onBack }: { review: ReviewOption; onBack: () => void }) {
   const [showFeedback, setShowFeedback] = useState(false);
-  const quiz = useQuiz('/ap_statistics_questions.csv', 'ap-statistics');
+  const quiz = useQuiz(review.csvPath, review.id);
 
   if (quiz.loading) {
     return (
@@ -68,8 +86,8 @@ function APReviewQuiz({ onBack }: { onBack: () => void }) {
             </button>
 
             <div className="flex-shrink-0">
-              <h1 className="text-base font-semibold text-gray-900">AP Statistics</h1>
-              <p className="text-xs text-gray-400">678 questions</p>
+              <h1 className="text-base font-semibold text-gray-900">{review.title}</h1>
+              <p className="text-xs text-gray-400">{review.questionCount} questions</p>
             </div>
 
             {/* Progress bar */}
@@ -174,11 +192,12 @@ function APReviewQuiz({ onBack }: { onBack: () => void }) {
 export default function APReviewPage() {
   const isClient = useIsClient();
   const [selectedReview, setSelectedReview] = useState<string | null>(null);
+  const activeReview = reviewOptions.find((review) => review.id === selectedReview) ?? null;
 
   if (!isClient) return <main className="min-h-screen bg-white opacity-0" />;
 
-  if (selectedReview) {
-    return <APReviewQuiz onBack={() => setSelectedReview(null)} />;
+  if (activeReview) {
+    return <APReviewQuiz review={activeReview} onBack={() => setSelectedReview(null)} />;
   }
 
   return (
@@ -189,7 +208,7 @@ export default function APReviewPage() {
           <p className="text-xs uppercase tracking-widest text-gray-400 mb-2">AP Reviews</p>
           <h1 className="text-3xl font-light text-gray-900 mb-3 font-display">Choose a review to begin</h1>
           <p className="text-gray-500 mb-8">
-            Select the AP review you want to study, and start practicing with hundreds of questions and detailed explanations
+            Select the AP review you want to study, and start practicing with hundreds of questions and detailed explanations.
           </p>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -214,7 +233,7 @@ export default function APReviewPage() {
 
           <div className="mt-8 rounded-xl border border-dashed border-gray-200 bg-gray-50 p-5">
             <p className="text-sm font-medium text-gray-700">More AP reviews coming soon</p>
-            <p className="text-sm text-gray-400 mt-1">AP Calculus, AP Biology, and other exams are on the way.</p>
+            <p className="text-sm text-gray-400 mt-1">AP Biology and other exams are on the way.</p>
           </div>
         </div>
       </section>

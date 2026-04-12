@@ -42,7 +42,7 @@ export function useQuiz(csvPath: string, classType: string): UseQuizReturn {
           throw new Error(`Failed to load quiz: ${response.status}`);
         }
         const csvText = await response.text();
-        const parsedQuestions = parseCsvText(csvText);
+        const parsedQuestions = parseCsvText(csvText, classType);
 
         if (!parsedQuestions.length) {
           throw new Error('No questions found in quiz file');

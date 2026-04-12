@@ -34,7 +34,7 @@ export interface QuizState {
  * Parse CSV text into an array of question objects
  * Properly handles quoted fields with newlines
  */
-export function parseCsvText(csvText: string): QuizQuestion[] {
+export function parseCsvText(csvText: string, className: QuizQuestion['class'] = 'ap-statistics'): QuizQuestion[] {
   const lines = parseCSVRows(csvText);
   if (lines.length < 2) return [];
 
@@ -50,7 +50,7 @@ export function parseCsvText(csvText: string): QuizQuestion[] {
       record[header] = values[index] || '';
     });
 
-    const question = normalizeQuestion(record);
+    const question = normalizeQuestion(record, className);
     if (question) {
       questions.push(question);
     }
@@ -133,7 +133,10 @@ function parseCSVLine(line: string): string[] {
 /**
  * Normalize a CSV record into a QuizQuestion object
  */
-function normalizeQuestion(record: Record<string, string>): QuizQuestion | null {
+function normalizeQuestion(
+  record: Record<string, string>,
+  className: QuizQuestion['class'],
+): QuizQuestion | null {
   const questionNumber = parseInt(record['question_number'] || '', 10);
   if (!questionNumber || isNaN(questionNumber)) return null;
 
@@ -152,7 +155,7 @@ function normalizeQuestion(record: Record<string, string>): QuizQuestion | null 
 
   return {
     questionNumber,
-    class: 'ap-statistics',
+    class: className,
     url: record['url'] || undefined,
     questionText: record['question'] || '',
     questionImageUrls: parseImageUrls(record['question_image_urls'] || ''),
