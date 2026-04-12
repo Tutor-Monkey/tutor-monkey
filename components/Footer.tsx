@@ -19,7 +19,6 @@ export default function Footer() {
               <Link href="/subjects" className="hover:text-white transition-colors font-light block">Subjects</Link>
               <Link href="/tutors" className="hover:text-white transition-colors font-light block">Tutors</Link>
               <Link href="/contact" className="hover:text-white transition-colors font-light block">Contact</Link>
-              <Link href="/join" className="hover:text-white transition-colors font-light block">Join</Link>
             </div>
           </div>
           
