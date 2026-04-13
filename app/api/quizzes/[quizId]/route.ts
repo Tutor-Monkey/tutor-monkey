@@ -1,11 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { parseCsvText } from '@/lib/quizData';
-import {
-  getQuizAccessCookieName,
-  verifyQuizAccessToken,
-} from '@/lib/quizAccess';
 
 const QUIZ_FILES: Record<string, string> = {
   'ap-statistics': 'ap_statistics_questions.csv',
@@ -15,14 +11,9 @@ const QUIZ_FILES: Record<string, string> = {
 };
 
 export async function GET(
-  request: NextRequest,
+  _request: Request,
   { params }: { params: { quizId: string } },
 ) {
-  const accessToken = request.cookies.get(getQuizAccessCookieName())?.value;
-  if (!(await verifyQuizAccessToken(accessToken))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const fileName = QUIZ_FILES[params.quizId];
 
   if (!fileName) {
