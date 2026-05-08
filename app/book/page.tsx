@@ -13,7 +13,6 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
-console.log("Supabase client initialized:", supabase);
 
 export default function BookPage() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
