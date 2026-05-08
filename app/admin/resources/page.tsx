@@ -16,7 +16,6 @@ export default function AdminResourcesPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [token, setToken] = useState("");
   const [folderMode, setFolderMode] = useState<"existing" | "new">("existing");
   const [selectedFolder, setSelectedFolder] = useState("");
   const [newFolderTitle, setNewFolderTitle] = useState("");
@@ -106,11 +105,6 @@ export default function AdminResourcesPage() {
     setFormError(null);
     setSuccess(null);
 
-    if (!token.trim()) {
-      setFormError("Admin token is required to delete.");
-      return;
-    }
-
     const confirmed = window.confirm(`Delete “${resourceTitle}”? This cannot be undone.`);
     if (!confirmed) {
       return;
@@ -121,8 +115,7 @@ export default function AdminResourcesPage() {
       const response = await fetch("/api/admin/resources", {
         method: "DELETE",
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token.trim()}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({ resourceId })
       });
@@ -158,18 +151,12 @@ export default function AdminResourcesPage() {
     setFormError(null);
     setSuccess(null);
 
-    if (!token.trim()) {
-      setFormError("Admin token is required to reorder.");
-      return;
-    }
-
     try {
       setSubmitting(true);
       const response = await fetch("/api/admin/resources", {
         method: "PATCH",
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token.trim()}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({ action: "reorder", ...payload })
       });
@@ -283,11 +270,6 @@ export default function AdminResourcesPage() {
       return;
     }
 
-    if (!token.trim()) {
-      setFormError("Admin token is required to submit.");
-      return;
-    }
-
     const method = isEditing ? "PATCH" : "POST";
     const payload = isEditing
       ? {
@@ -321,8 +303,7 @@ export default function AdminResourcesPage() {
       const response = await fetch("/api/admin/resources", {
         method,
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token.trim()}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify(payload)
       });
@@ -375,8 +356,8 @@ export default function AdminResourcesPage() {
           <header className="mb-12">
             <h1 className="text-4xl font-light text-gray-900 mb-3">Resources Admin</h1>
             <p className="text-gray-600 max-w-3xl">
-              Add new worksheets or subjects without editing code. Provide your admin token, choose whether the worksheet belongs
-              to an existing subject or a new one, and paste the Google Drive links.
+              Add new worksheets or subjects without editing code. Choose whether the worksheet belongs to an existing subject or
+              a new one, and paste the Google Drive links.
             </p>
           </header>
 
@@ -385,21 +366,6 @@ export default function AdminResourcesPage() {
               onSubmit={handleSubmit}
               className="bg-white border border-gray-200 rounded-2xl shadow-sm p-8 flex flex-col gap-6"
             >
-              <div className="grid gap-1">
-                <label htmlFor="admin-token" className="text-sm font-semibold text-gray-700">
-                  Admin Token
-                </label>
-                <input
-                  id="admin-token"
-                  type="password"
-                  value={token}
-                  onChange={(event) => setToken(event.target.value)}
-                  placeholder="Paste the ADMIN_API_TOKEN value"
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
               {isEditing && (
                 <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
                   Editing “{resourceTitle || "Untitled"}” in{" "}

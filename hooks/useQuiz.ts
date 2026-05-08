@@ -12,6 +12,7 @@ import {
 
 export interface UseQuizReturn {
   questions: QuizQuestion[];
+  availableTopics: string[];
   loading: boolean;
   error: string | null;
   answers: Record<number, string>;
@@ -25,8 +26,12 @@ export interface UseQuizReturn {
   resetProgress: () => void;
 }
 
-export function useQuiz(quizPath: string, classType: string): UseQuizReturn {
-  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+export function useQuiz(
+  quizPath: string,
+  classType: string,
+  selectedTopics: string[] = [],
+): UseQuizReturn {
+  const [allQuestions, setAllQuestions] = useState<QuizQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -46,7 +51,7 @@ export function useQuiz(quizPath: string, classType: string): UseQuizReturn {
           throw new Error('No questions found in quiz file');
         }
 
-        setQuestions(parsedQuestions);
+        setAllQuestions(parsedQuestions);
 
         // Restore progress
         const saved = loadQuizProgress(classType);
@@ -69,6 +74,19 @@ export function useQuiz(quizPath: string, classType: string): UseQuizReturn {
     loadQuiz();
   }, [quizPath, classType]);
 
+  const filteredQuestions =
+    selectedTopics.length === 0
+      ? allQuestions
+      : allQuestions.filter((question) => question.topic && selectedTopics.includes(question.topic));
+
+  const availableTopics = Array.from(
+    new Set(
+      allQuestions
+        .map((question) => question.topic)
+        .filter((topic): topic is string => Boolean(topic)),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
   const saveAnswer = useCallback(
     (questionNumber: number, answer: string) => {
       setAnswers((prev) => {
@@ -85,25 +103,27 @@ export function useQuiz(quizPath: string, classType: string): UseQuizReturn {
   );
 
   const nextQuestion = useCallback(() => {
-    setCurrentIndex((prev) => Math.min(prev + 1, questions.length - 1));
-  }, [questions.length]);
+    setCurrentIndex((prev) =>
+      filteredQuestions.length === 0 ? 0 : Math.min(prev + 1, filteredQuestions.length - 1),
+    );
+  }, [filteredQuestions.length]);
 
   const prevQuestion = useCallback(() => {
     setCurrentIndex((prev) => Math.max(prev - 1, 0));
   }, []);
 
   const goToQuestion = useCallback((index: number) => {
-    setCurrentIndex(Math.max(0, Math.min(index, questions.length - 1)));
-  }, [questions.length]);
+    setCurrentIndex(Math.max(0, Math.min(index, filteredQuestions.length - 1)));
+  }, [filteredQuestions.length]);
 
   const randomQuestion = useCallback(() => {
-    if (questions.length <= 1) return;
+    if (filteredQuestions.length <= 1) return;
     let nextIdx = currentIndex;
     while (nextIdx === currentIndex) {
-      nextIdx = Math.floor(Math.random() * questions.length);
+      nextIdx = Math.floor(Math.random() * filteredQuestions.length);
     }
     setCurrentIndex(nextIdx);
-  }, [questions.length, currentIndex]);
+  }, [filteredQuestions.length, currentIndex]);
 
   const resetProgress = useCallback(() => {
     setAnswers({});
@@ -111,10 +131,20 @@ export function useQuiz(quizPath: string, classType: string): UseQuizReturn {
     clearQuizProgress(classType);
   }, [classType]);
 
-  const stats = calculateStats(questions, answers);
+  useEffect(() => {
+    if (filteredQuestions.length === 0) {
+      setCurrentIndex(0);
+      return;
+    }
+
+    setCurrentIndex((prev) => Math.min(prev, filteredQuestions.length - 1));
+  }, [filteredQuestions.length]);
+
+  const stats = calculateStats(filteredQuestions, answers);
 
   return {
-    questions,
+    questions: filteredQuestions,
+    availableTopics,
     loading,
     error,
     answers,

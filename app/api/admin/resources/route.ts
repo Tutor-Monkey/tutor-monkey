@@ -7,18 +7,12 @@ import {
   reorder
 } from "@/lib/resources";
 
-const ADMIN_TOKEN = process.env.ADMIN_API_TOKEN;
-
 export async function GET() {
   const resources = await readResources();
   return NextResponse.json({ resources });
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const payload = (await request.json()) as AdminAddResourcePayload;
   if (payload.action !== "addResource") {
     return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
@@ -66,10 +60,6 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const payload = await request.json();
 
   if (payload.action === "updateResource") {
@@ -140,10 +130,6 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const { resourceId } = (await request.json()) as AdminDeleteResourcePayload;
 
   if (!resourceId?.trim()) {
@@ -205,19 +191,4 @@ function sanitizeLinks(links: AdminBaseResourcePayload["resource"]["links"]) {
       url: link.url?.trim() ?? ""
     }))
     .filter((link) => link.label && link.url);
-}
-
-function isAuthorized(request: NextRequest) {
-  if (!ADMIN_TOKEN) {
-    console.warn("ADMIN_API_TOKEN is not configured");
-    return false;
-  }
-
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return false;
-  }
-
-  const token = authHeader.slice("Bearer ".length).trim();
-  return token === ADMIN_TOKEN;
 }

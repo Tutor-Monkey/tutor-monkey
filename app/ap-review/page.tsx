@@ -57,7 +57,8 @@ const reviewOptions: ReviewOption[] = [
 function APReviewQuiz({ review, onBack }: { review: ReviewOption; onBack: () => void }) {
   const [showFeedback, setShowFeedback] = useState(false);
   const [direction, setDirection] = useState<1 | -1>(1);
-  const quiz = useQuiz(review.quizPath, review.id);
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const quiz = useQuiz(review.quizPath, review.id, selectedTopics);
 
   if (quiz.loading) {
     return (
@@ -87,6 +88,20 @@ function APReviewQuiz({ review, onBack }: { review: ReviewOption; onBack: () => 
     quiz.stats.answered > 0
       ? Math.round((quiz.stats.correct / quiz.stats.answered) * 100)
       : 0;
+  const topicSummary =
+    selectedTopics.length === 0
+      ? 'All topics'
+      : selectedTopics.length === 1
+        ? selectedTopics[0]
+        : `${selectedTopics.length} topics selected`;
+
+  const toggleTopic = (topic: string) => {
+    setShowFeedback(false);
+    setDirection(1);
+    setSelectedTopics((prev) =>
+      prev.includes(topic) ? prev.filter((value) => value !== topic) : [...prev, topic],
+    );
+  };
 
   return (
     <div className="flex flex-col h-dvh bg-white text-gray-900">
@@ -136,12 +151,73 @@ function APReviewQuiz({ review, onBack }: { review: ReviewOption; onBack: () => 
               </button>
             </div>
           </div>
+
+          {quiz.availableTopics.length > 0 && (
+            <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-gray-400">Topics</p>
+                  <p className="text-sm text-gray-600">{topicSummary}</p>
+                </div>
+                {selectedTopics.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTopics([]);
+                      setShowFeedback(false);
+                      setDirection(1);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs font-medium text-gray-700 transition-colors"
+                  >
+                    Show all
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {quiz.availableTopics.map((topic) => {
+                  const selected = selectedTopics.includes(topic);
+                  return (
+                    <button
+                      key={topic}
+                      type="button"
+                      onClick={() => toggleTopic(topic)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                        selected
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {topic}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
       {/* Full-height card area — min-h-0 lets flex-1 shrink correctly */}
       <main className="flex-1 min-h-0 px-4 sm:px-6 py-4">
         <div className="h-full max-w-5xl mx-auto">
+          {quiz.questions.length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="max-w-md w-full rounded-2xl border border-gray-200 bg-gray-50 p-8 text-center">
+                <p className="text-gray-900 font-semibold mb-2">No questions match this topic filter.</p>
+                <p className="text-gray-500 text-sm mb-5">
+                  Select different topics or return to all topics for this review.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTopics([])}
+                  className="px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  Show all topics
+                </button>
+              </div>
+            </div>
+          ) : (
           <AnimatePresence mode="wait">
             <motion.div
               key={`q-${currentQuestion.questionNumber}`}
@@ -177,6 +253,7 @@ function APReviewQuiz({ review, onBack }: { review: ReviewOption; onBack: () => 
               )}
             </motion.div>
           </AnimatePresence>
+          )}
         </div>
       </main>
 
