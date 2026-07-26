@@ -43,7 +43,7 @@ export default function Home() {
                 <div className="flex flex-col lg:flex-row gap-8 items-start">
                   <div className="w-full lg:w-1/2">
                     <a
-                      href="https://hcb.hackclub.com/tutor-monkey/fiscal_sponsorship_letter.pdf"
+                      href="/fiscal-sponsorship-letter.pdf"
                       className="text-gray-900 underline decoration-gray-400 underline-offset-4 hover:text-gray-700 transition-colors"
                       target="_blank"
                       rel="noreferrer"
