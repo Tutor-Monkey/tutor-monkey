@@ -191,7 +191,10 @@ export default function TeachersDashboardPage() {
                   schemaStatus={schemaStatus}
                   userId={authState.session.user.id}
                 />
-                <MaterialsIntakePanel schemaStatus={schemaStatus} />
+                <MaterialsIntakePanel
+                  schemaStatus={schemaStatus}
+                  userId={authState.session.user.id}
+                />
               </div>
 
               {/* Roadmap: next product surfaces */}
@@ -229,7 +232,7 @@ export default function TeachersDashboardPage() {
 
                 <p className="mt-8 text-sm text-gray-500 font-light">
                   {schemaStatus === "ready"
-                    ? "Workspaces you create are saved to Supabase under your account. File upload and worksheet generation land in the next milestone."
+                    ? "Workspaces and uploads you save go to Supabase under your account — uploads land in the workspace you explicitly pick. Document reading and worksheet generation land in the next milestone."
                     : "The Teachers database migration (supabase/migrations/) is written but not applied yet — this page degrades gracefully until it is."}
                 </p>
               </div>
