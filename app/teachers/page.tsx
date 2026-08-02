@@ -79,19 +79,18 @@ const featureCards = [
 ];
 
 /**
- * Placeholder Google sign-in button.
+ * Google sign-in CTA.
  *
- * NOTE: OAuth is intentionally NOT implemented in this slice. This button is a
- * visual placeholder for the next milestone (Google OAuth sign-in). It does not
- * collect credentials or call any backend — clicking it is a no-op.
+ * Links to /teachers/sign-in, which starts the Google OAuth flow (PKCE)
+ * against Supabase. No credentials are collected or stored on this page.
  */
 function ContinueWithGoogle({ dark = false }: { dark?: boolean }) {
   return (
     <div className="flex flex-col items-center gap-3">
-      <button
-        type="button"
-        title="Continue with Google — coming soon (placeholder for the next milestone)"
-        aria-label="Continue with Google — coming soon"
+      <Link
+        href="/teachers/sign-in"
+        title="Sign in with Google to open your Teachers workspace"
+        aria-label="Continue with Google"
         className="group inline-flex items-center gap-3 rounded-full border border-gray-300 bg-white px-7 py-3.5 text-base font-medium text-gray-900 shadow-sm transition-all duration-300 hover:bg-gray-50 hover:shadow-md"
       >
         {/* Official Google "G" mark */}
@@ -114,21 +113,13 @@ function ContinueWithGoogle({ dark = false }: { dark?: boolean }) {
           />
         </svg>
         Continue with Google
-        <span
-          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-            dark ? "bg-gray-900/10 text-gray-600" : "bg-gray-100 text-gray-500"
-          }`}
-        >
-          Preview
-        </span>
-      </button>
+      </Link>
       <p
         className={`text-sm font-light ${
           dark ? "text-gray-400" : "text-gray-500"
         }`}
       >
-        Sign-in lands in the next milestone — this button is a placeholder for
-        now.
+        Secure Google sign-in — no password needed.
       </p>
     </div>
   );
