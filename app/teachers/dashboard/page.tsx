@@ -17,6 +17,9 @@ import {
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useTeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
+import { CreateWorkspacePanel } from "@/components/teachers/CreateWorkspacePanel";
+import { MaterialsIntakePanel } from "@/components/teachers/MaterialsIntakePanel";
 
 type AuthState =
   | { status: "loading" }
@@ -55,6 +58,7 @@ export default function TeachersDashboardPage() {
     status: "loading",
   });
   const [signOutError, setSignOutError] = useState<string | null>(null);
+  const schemaStatus = useTeachersSchemaStatus();
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -181,25 +185,23 @@ export default function TeachersDashboardPage() {
                 </div>
               </div>
 
-              {/* Workspace: next product surface */}
-              <div className="rounded-3xl border border-dashed border-gray-300 bg-gray-50/60 p-8 md:p-12 animate-fade-in-up animation-delay-200">
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-10">
-                  <div>
-                    <h2 className="text-2xl md:text-3xl font-light text-gray-900 mb-2 font-display text-balance">
-                      Your worksheet workspace
-                    </h2>
-                    <p className="text-gray-600 font-light max-w-xl">
-                      This is where you&apos;ll import materials and generate
-                      classroom-ready worksheets —{" "}
-                      <span className="font-medium text-gray-900">
-                        coming in the next milestone.
-                      </span>
-                    </p>
-                  </div>
-                  <span className="inline-flex shrink-0 items-center self-start rounded-full bg-gray-900 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-white">
-                    Coming next
-                  </span>
-                </div>
+              {/* Workspace creation + materials intake */}
+              <div className="grid lg:grid-cols-2 gap-8 mb-16 animate-fade-in-up animation-delay-200">
+                <CreateWorkspacePanel
+                  schemaStatus={schemaStatus}
+                  userId={authState.session.user.id}
+                />
+                <MaterialsIntakePanel schemaStatus={schemaStatus} />
+              </div>
+
+              {/* Roadmap: next product surfaces */}
+              <div className="animate-fade-in-up animation-delay-400">
+                <h2 className="text-2xl md:text-3xl font-light text-gray-900 mb-2 font-display text-balance">
+                  What&apos;s next
+                </h2>
+                <p className="text-gray-600 font-light max-w-xl mb-8">
+                  The pieces that turn your workspace into a worksheet machine.
+                </p>
 
                 <div className="grid sm:grid-cols-2 gap-6">
                   {workspaceFeatures.map((feature) => (
@@ -212,7 +214,7 @@ export default function TeachersDashboardPage() {
                           <feature.icon className="h-5 w-5" aria-hidden="true" />
                         </div>
                         <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                          Next surface
+                          On the roadmap
                         </span>
                       </div>
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -226,9 +228,9 @@ export default function TeachersDashboardPage() {
                 </div>
 
                 <p className="mt-8 text-sm text-gray-500 font-light">
-                  Nothing is saved to your account yet — file import and
-                  storage are the next product surface and aren&apos;t live
-                  today.
+                  {schemaStatus === "ready"
+                    ? "Workspaces you create are saved to Supabase under your account. File upload and worksheet generation land in the next milestone."
+                    : "The Teachers database migration (supabase/migrations/) is written but not applied yet — this page degrades gracefully until it is."}
                 </p>
               </div>
 
