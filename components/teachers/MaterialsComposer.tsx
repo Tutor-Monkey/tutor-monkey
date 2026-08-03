@@ -35,8 +35,9 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { uploadWorksheetToDrive } from "@/lib/teachers/driveSaveClient";
 
 type MentionPart = { kind: "mention"; doc: ComposerSourceDoc };
+type FolderPart = { kind: "folder"; name: string; path: string[] };
 type TextPart = { kind: "text"; value: string };
-type EditorPart = MentionPart | TextPart;
+type EditorPart = MentionPart | FolderPart | TextPart;
 
 type MaterialsComposerProps = {
   currentWorkspaceId: string;
@@ -46,7 +47,9 @@ type MaterialsComposerProps = {
 const emptyParts: EditorPart[] = [{ kind: "text", value: "" }];
 
 function partText(part: EditorPart): string {
-  return part.kind === "mention" ? `@${part.doc.filename}` : part.value;
+  if (part.kind === "mention") return `@${part.doc.filename}`;
+  if (part.kind === "folder") return `@${part.name}`;
+  return part.value;
 }
 
 function partsText(parts: readonly EditorPart[]): string {
@@ -72,6 +75,9 @@ function readParts(root: HTMLDivElement, docs: readonly ComposerSourceDoc[]): Ed
   return normalizeParts(
     Array.from(root.childNodes).map((node): EditorPart => {
       if (node.nodeType === Node.ELEMENT_NODE) {
+        const folderPath = (node as HTMLElement).dataset.folderPath;
+        const folderName = (node as HTMLElement).dataset.folderName;
+        if (folderPath && folderName) return { kind: "folder", name: folderName, path: folderPath.split("/") };
         const id = (node as HTMLElement).dataset.mentionId;
         const doc = id ? byId.get(id) : undefined;
         if (doc) return { kind: "mention", doc };
@@ -213,10 +219,18 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
       } catch { return; }
     } else if (folderPayload) {
       try {
-        const folder = JSON.parse(folderPayload) as { path: string[] };
-        const result = await fetchWorkspaceSuggestions(currentWorkspaceId, "", 100);
-        if (result.ok) dropped = result.candidates.filter((doc) => folder.path.every((segment, index) => doc.folderSegments[index] === segment));
+        const folder = JSON.parse(folderPayload) as { name: string; path: string[] };
+        const nextParts = normalizeParts([...parts, { kind: "folder", name: folder.name, path: folder.path }, { kind: "text", value: " " }]);
+        setParts(nextParts);
+        requestAnimationFrame(() => {
+          if (!editorRef.current) return;
+          editorRef.current.innerHTML = "";
+          nextParts.forEach((part, index) => editorRef.current?.appendChild(renderDomPart(part, index)));
+          placeCaretAtEnd(editorRef.current);
+          setCaret(partsText(nextParts).length);
+        });
       } catch { return; }
+      return;
     }
     const usable = dropped.filter(canUseSource);
     if (usable.length === 0) return;
@@ -517,10 +531,16 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
 function renderDomPart(part: EditorPart, index: number): Node {
   if (part.kind === "text") return document.createTextNode(part.value);
   const span = document.createElement("span");
-  span.dataset.mentionId = part.doc.id;
   span.contentEditable = "false";
   span.className = "mx-0.5 inline-flex select-none items-center rounded-md bg-indigo-100 px-1.5 py-0.5 align-baseline text-sm font-medium text-indigo-700";
-  span.textContent = `@${part.doc.filename}`;
+  if (part.kind === "folder") {
+    span.dataset.folderName = part.name;
+    span.dataset.folderPath = part.path.join("/");
+    span.textContent = `@${part.name}`;
+  } else {
+    span.dataset.mentionId = part.doc.id;
+    span.textContent = `@${part.doc.filename}`;
+  }
   span.setAttribute("data-part-index", String(index));
   return span;
 }

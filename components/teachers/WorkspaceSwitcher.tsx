@@ -28,6 +28,7 @@ type WorkspaceSwitcherProps = {
   schemaStatus: TeachersSchemaStatus;
   onSelect: (workspaceId: string) => void;
   onAddWorkspace: () => void;
+  dark?: boolean;
 };
 
 /**
@@ -47,6 +48,7 @@ export function WorkspaceSwitcher({
   schemaStatus,
   onSelect,
   onAddWorkspace,
+  dark = false,
 }: WorkspaceSwitcherProps) {
   const isReady = schemaStatus === "ready";
   const state = describeWorkspaceSelector(
@@ -60,29 +62,29 @@ export function WorkspaceSwitcher({
 
   return (
     <div className="px-3 pt-4">
-      <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+      <p className={`mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide ${dark ? "text-[#858896]" : "text-gray-400"}`}>
         Workspace
       </p>
       <DropdownMenu>
         <DropdownMenuTrigger
           disabled={triggerDisabled}
           title={state.phase === "ready" ? "Switch workspace" : undefined}
-          className="flex w-full items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 data-[state=open]:bg-gray-50"
+          className={`flex w-full items-center gap-2.5 rounded-md border px-3 py-2.5 text-left shadow-sm transition-colors hover:bg-[#2b2d38] disabled:cursor-not-allowed disabled:opacity-60 data-[state=open]:bg-[#303343] ${dark ? "border-[#454652] bg-[#20212b]" : "border-gray-200 bg-white hover:bg-gray-50 data-[state=open]:bg-gray-50"}`}
         >
           {state.phase === "ready" ? (
             <>
               <span
                 aria-hidden="true"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-900 text-[11px] font-semibold text-white"
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-semibold ${dark ? "bg-[#303343] text-[#e4e4e7]" : "bg-gray-900 text-white"}`}
               >
                 {workspaceInitials(state.current.title)}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-gray-900">
+                <span className={`block truncate text-sm font-semibold ${dark ? "text-[#f4f4f5]" : "text-gray-900"}`}>
                   {state.current.title}
                 </span>
                 {state.current.description && (
-                  <span className="block truncate text-[11px] font-light text-gray-500">
+                  <span className={`block truncate text-[11px] font-light ${dark ? "text-[#858896]" : "text-gray-500"}`}>
                     {state.current.description}
                   </span>
                 )}

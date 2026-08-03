@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -25,6 +26,7 @@ import type { TeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
 import {
   folderPathKey,
   groupFolderContents,
+  normalizeFolderPath,
   toDocumentFileEntry,
   type DocumentFileEntry,
   type WorkspaceSummary,
@@ -55,6 +57,14 @@ type DocumentRow = {
   folder_path?: unknown;
 };
 
+function setExplorerDragPreview(event: React.DragEvent<HTMLElement>, label: string) {
+  const preview = document.createElement("div");
+  preview.textContent = label;
+  preview.style.cssText = "position:fixed;top:-1000px;left:-1000px;padding:6px 10px;border-radius:8px;background:#303343;color:#f4f4f5;border:1px solid #6d8de6;font:14px system-ui;opacity:1;pointer-events:none;";
+  document.body.appendChild(preview);
+  event.dataTransfer.setDragImage(preview, 12, 16);
+  requestAnimationFrame(() => preview.remove());
+}
 type DocumentsViewProps = {
   schemaStatus: TeachersSchemaStatus;
   userId: string;
@@ -101,6 +111,8 @@ export function DocumentsView({
   const [driveFolderPaths, setDriveFolderPaths] = useState<string[][]>([]);
   const [driveImporting, setDriveImporting] = useState(false);
   const [driveImportResult, setDriveImportResult] = useState<DriveImportOutcome | null>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set([""]));
+  const [activeFolderKey, setActiveFolderKey] = useState("");
 
   const isReady = schemaStatus === "ready";
 
@@ -218,6 +230,8 @@ export function DocumentsView({
   // shows a path that belongs to the previous workspace.
   useEffect(() => {
     setFolderSegments([]);
+    setExpandedFolders(new Set([""]));
+    setActiveFolderKey("");
     setImportOpen(false);
     setDrivePicks([]);
     setDriveFolderPaths([]);
@@ -259,8 +273,85 @@ export function DocumentsView({
     return { folders, files: base.files };
   }, [entries, folderSegments, workspaceFolderPaths, driveFolderPaths]);
 
-  const emptyFolder =
-    !loading && !loadError && contents.folders.length === 0 && contents.files.length === 0;
+  const allFolderPaths = useMemo(() => {
+    const paths = new Map<string, string[]>();
+    const addPath = (path: string[]) => {
+      for (let length = 1; length <= path.length; length += 1) {
+        const next = path.slice(0, length);
+        paths.set(folderPathKey(next), next);
+      }
+    };
+    for (const path of [...workspaceFolderPaths, ...driveFolderPaths]) addPath(path);
+    for (const entry of entries) addPath(normalizeFolderPath(entry.folderSegments));
+    return Array.from(paths.values()).sort((a, b) => a.length - b.length || folderPathKey(a).localeCompare(folderPathKey(b)));
+  }, [driveFolderPaths, entries, workspaceFolderPaths]);
+
+  const emptyFolder = !loading && !loadError && allFolderPaths.length === 0 && entries.length === 0;
+
+  function toggleFolder(path: string[]) {
+    const key = folderPathKey(path);
+    setActiveFolderKey(key);
+    setExpandedFolders((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function renderTree(path: string[] = [], depth = 0): React.ReactNode {
+    const childFolders = allFolderPaths.filter((candidate) =>
+      candidate.length === path.length + 1 && path.every((segment, index) => candidate[index] === segment),
+    );
+    const files = entries.filter((entry) => folderPathKey(normalizeFolderPath(entry.folderSegments)) === folderPathKey(path));
+    const isExpanded = expandedFolders.has(folderPathKey(path));
+    if (!isExpanded && path.length > 0) return null;
+    return (
+      <>
+        {childFolders.map((folder) => {
+          const key = folderPathKey(folder);
+          const open = expandedFolders.has(key);
+          return (
+            <div key={key}>
+              <button
+                type="button"
+                draggable
+                onClick={() => toggleFolder(folder)}
+                onDragStart={(event) => {
+                  setExplorerDragPreview(event, folder[folder.length - 1]);
+                  event.dataTransfer.effectAllowed = "copy";
+                  event.dataTransfer.setData("application/x-tutormonkey-folder", JSON.stringify({ name: folder[folder.length - 1], path: folder }));
+                }}
+                style={{ paddingLeft: `${8 + depth * 16}px` }}
+                className={`flex w-full items-center gap-2 rounded-md border px-2 py-1 text-left text-sm transition-colors ${activeFolderKey === key ? "border-[#6d8de6] bg-[#303343] text-white" : "border-transparent text-[#e4e4e7] hover:bg-[#2b2d38]"}`}
+              >
+                {open ? <ChevronDown className="h-4 w-4 shrink-0 text-[#b8bac4]" /> : <ChevronRight className="h-4 w-4 shrink-0 text-[#b8bac4]" />}
+                <Folder className="h-4 w-4 shrink-0 text-amber-500" />
+                <span className="truncate">{folder[folder.length - 1]}</span>
+              </button>
+              {open && renderTree(folder, depth + 1)}
+            </div>
+          );
+        })}
+        {files.map((entry) => (
+          <div
+            key={entry.id}
+            draggable
+            onDragStart={(event) => {
+              setExplorerDragPreview(event, entry.name);
+              event.dataTransfer.effectAllowed = "copy";
+              event.dataTransfer.setData("application/x-tutormonkey-document", JSON.stringify(entry));
+            }}
+            style={{ paddingLeft: `${28 + depth * 16}px` }}
+            className="flex cursor-grab items-center gap-2 rounded-md border border-transparent px-2 py-1 text-sm text-[#e4e4e7] opacity-100 transition-colors hover:bg-[#2b2d38] active:rounded-md"
+          >
+            <FileText className="h-4 w-4 shrink-0 text-[#7aa2f7]" />
+            <span className="truncate">{entry.name}</span>
+          </div>
+        ))}
+      </>
+    );
+  }
 
   return (
     <section
@@ -275,14 +366,14 @@ export function DocumentsView({
           </button>
         </div>
         <div className="mt-6 flex items-center gap-2 px-1">
-          <button type="button" onClick={() => setFolderSegments([])} aria-label="Collapse workspace" className="rounded p-0.5 text-[#c7c8ce] hover:bg-[#30323d]">
-            {folderSegments.length === 0 ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+          <button type="button" onClick={() => { setExpandedFolders(new Set([""])); setActiveFolderKey(""); }} aria-label="Collapse workspace" className="rounded p-0.5 text-[#c7c8ce] hover:bg-[#30323d]">
+            {expandedFolders.has("") ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
           </button>
           <span className="min-w-0 flex-1 truncate text-[17px] font-semibold text-[#f4f4f5]">{currentWorkspace?.title ?? "workspace"}</span>
           <button type="button" onClick={() => setImportOpen(true)} disabled={!isReady || !currentWorkspace} aria-label="New document" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white disabled:opacity-40"><FilePlus2 className="h-5 w-5" /></button>
           <GoogleDriveImportButton mode="folders" compact label="Import folder from Google Drive" onPicked={handleDrivePicked} onGateChange={setDriveGate} disabled={!isReady || !currentWorkspace} />
           <button type="button" onClick={() => void loadDocuments()} disabled={loading} aria-label="Refresh explorer" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white disabled:opacity-40"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button>
-          <button type="button" onClick={() => setFolderSegments([])} aria-label="Collapse all folders" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white"><PanelLeftClose className="h-5 w-5" /></button>
+          <button type="button" onClick={() => { setExpandedFolders(new Set([""])); setActiveFolderKey(""); }} aria-label="Collapse all folders" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white"><PanelLeftClose className="h-5 w-5" /></button>
         </div>
       </div>
 
@@ -329,14 +420,15 @@ export function DocumentsView({
         </div>
       )}
 
-      {/* Import flow (inline, workspace-seeded) */}
       {importOpen && currentWorkspace && (
-        <div className="mb-6 animate-fade-in">
-          <MaterialsIntakePanel
-            schemaStatus={schemaStatus}
-            userId={userId}
-            initialWorkspaceId={currentWorkspace.id}
-          />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Import documents">
+          <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div><h2 className="text-lg font-semibold text-gray-900">Import documents</h2><p className="mt-1 text-sm text-gray-500">Drop files here or choose them from your computer.</p></div>
+              <button type="button" onClick={() => setImportOpen(false)} aria-label="Close import dialog" className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"><X className="h-5 w-5" /></button>
+            </div>
+            <MaterialsIntakePanel schemaStatus={schemaStatus} userId={userId} initialWorkspaceId={currentWorkspace.id} />
+          </div>
         </div>
       )}
 
@@ -404,8 +496,11 @@ export function DocumentsView({
             </div>
           )}
 
+          <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#858896]">WORKSPACE</div>
+          <div className="space-y-0.5">{renderTree()}</div>
+
           {contents.folders.length > 0 && (
-            <div>
+            <div className="hidden">
               <h3 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#858896]">
                 Folders
               </h3>
@@ -437,7 +532,7 @@ export function DocumentsView({
           )}
 
           {contents.files.length > 0 && (
-            <div>
+            <div className="hidden">
               <h3 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#858896]">
                 Files
               </h3>

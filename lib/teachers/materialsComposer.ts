@@ -207,6 +207,13 @@ export function rankDocumentCandidates(
       }
     }
 
+    if (score < 0) {
+      const folderText = doc.folderSegments.join(" ").toLowerCase();
+      if (folderText === needle) score = 0;
+      else if (folderText.startsWith(needle)) score = 1;
+      else if (folderText.includes(needle)) score = 3;
+    }
+
     if (score >= 0) {
       scored.push({ doc, score });
     }

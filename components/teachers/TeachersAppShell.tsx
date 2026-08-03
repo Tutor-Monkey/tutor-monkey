@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft,
   Files,
   GraduationCap,
   LogOut,
@@ -77,8 +76,8 @@ export function TeachersAppShell({
 }: TeachersAppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const renderWorkspaceSwitcher = (closeOnClick: boolean) => (
-    <div className="border-b border-gray-100 pb-4">
+  const renderWorkspaceSwitcher = (closeOnClick: boolean, dark = false) => (
+    <div className={`border-b pb-4 ${dark ? "border-[#3b3d49]" : "border-gray-100"}`}>
       <WorkspaceSwitcher
         workspaces={workspaces}
         currentWorkspaceId={currentWorkspaceId}
@@ -92,6 +91,7 @@ export function TeachersAppShell({
           onAddWorkspace();
           if (closeOnClick) setDrawerOpen(false);
         }}
+        dark={dark}
       />
     </div>
   );
@@ -198,16 +198,10 @@ export function TeachersAppShell({
         {/* Desktop sidebar */}
         <aside className="hidden w-[22rem] shrink-0 flex-col border-r border-[#454652] bg-[#20212b] lg:flex">
           <div className="flex-1 min-h-0 overflow-y-auto">
-            {leftPane ?? <div className="px-3 pt-4">{renderWorkspaceSwitcher(false)}{renderTabNav(false)}</div>}
-          </div>
-          <div className="border-t border-[#3b3d49] p-4">
-            <Link
-              href="/teachers"
-              className="flex items-center gap-2 text-xs font-medium text-gray-500 transition-colors hover:text-gray-900"
-            >
-              <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              Back to the Teachers overview
-            </Link>
+            <>
+              {renderWorkspaceSwitcher(false, true)}
+              {leftPane ?? renderTabNav(false)}
+            </>
           </div>
         </aside>
 
@@ -239,18 +233,8 @@ export function TeachersAppShell({
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto">
-                <div className="px-3 pt-4">{renderWorkspaceSwitcher(true)}</div>
+                <div className="px-3 pt-4">{renderWorkspaceSwitcher(true, true)}</div>
                 {leftPane ?? renderTabNav(true)}
-              </div>
-              <div className="border-t border-[#3b3d49] p-4">
-                <Link
-                  href="/teachers"
-                  onClick={() => setDrawerOpen(false)}
-                  className="flex items-center gap-2 text-xs font-medium text-gray-500 transition-colors hover:text-gray-900"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  Back to the Teachers overview
-                </Link>
               </div>
             </aside>
           </div>
