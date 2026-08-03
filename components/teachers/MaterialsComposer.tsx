@@ -152,9 +152,8 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
   const [activeIndex, setActiveIndex] = useState(0);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<GeneratedComposerMaterial | null>(null);
-  const [confirmation, setConfirmation] = useState<{ prompt: string; explicit: ComposerSourceDoc[]; suggested: ComposerSourceDoc[] } | null>(null);
-  const [confirming, setConfirming] = useState(false);
   const [driveSaving, setDriveSaving] = useState(false);
   const [driveSaved, setDriveSaved] = useState<string | null>(null);
 
@@ -247,44 +246,56 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
   }
 
   async function prepareGeneration() {
-    if (generating || confirming) return;
+    if (generating) return;
     const prompt = text.trim();
     if (!prompt || prompt.length > MAX_TEACHER_PROMPT_CHARS) return;
     setGenerating(true);
-    const result = await fetchWorkspaceSuggestions(currentWorkspaceId, prompt, SUGGESTION_LIMIT_MAX);
-    setGenerating(false);
-    if (!result.ok) return;
-    const explicitIds = new Set(selectedDocs.map((doc) => doc.id));
-    const suggested = result.candidates.filter((doc) => !explicitIds.has(doc.id) && canUseSource(doc)).slice(0, 4);
-    setConfirmation({ prompt, explicit: selectedDocs, suggested });
-  }
-
-  async function confirmGeneration() {
-    if (!confirmation || confirming) return;
-    setConfirming(true);
-    const candidates = [...confirmation.explicit, ...confirmation.suggested].filter(canUseSource);
-    const driveToken = await readGoogleProviderToken();
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) { setConfirming(false); return; }
-    for (const doc of candidates) {
-      if (!isReadySourceDoc(doc) && doc.sourceType === "google_drive") {
-        if (!driveToken || !(await hydrateDriveMaterial({ token: driveToken, materialId: doc.id, workspaceId: currentWorkspaceId, supabase }))) {
-          setConfirming(false);
-          return;
+    setGenerationError(null);
+    try {
+      const result = await fetchWorkspaceSuggestions(currentWorkspaceId, prompt, SUGGESTION_LIMIT_MAX);
+      if (!result.ok) {
+        setGenerationError(result.error);
+        return;
+      }
+      const explicitIds = new Set(selectedDocs.map((doc) => doc.id));
+      const candidates = [
+        ...selectedDocs,
+        ...result.candidates.filter((doc) => !explicitIds.has(doc.id)),
+      ].filter(canUseSource).slice(0, 12);
+      if (candidates.length === 0) {
+        setGenerationError("No usable source documents were found in this workspace.");
+        return;
+      }
+      const driveToken = await readGoogleProviderToken();
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        setGenerationError("The workspace connection is unavailable — please refresh and try again.");
+        return;
+      }
+      for (const doc of candidates) {
+        if (!isReadySourceDoc(doc) && doc.sourceType === "google_drive") {
+          if (!driveToken || !(await hydrateDriveMaterial({ token: driveToken, materialId: doc.id, workspaceId: currentWorkspaceId, supabase }))) {
+            setGenerationError(`Couldn't prepare ${doc.filename} for generation.`);
+            return;
+          }
         }
       }
-    }
-    const materialIds = Array.from(new Set(candidates.map((doc) => doc.id)));
-    const result = await requestWorkspaceGeneration(currentWorkspaceId, {
-      prompt: confirmation.prompt,
-      materialIds,
-      confirmedMaterialIds: materialIds,
-    });
-    setConfirming(false);
-    if (result.ok) {
-      setGenerated(result.material);
-      setConfirmation(null);
-      onGenerated(result.material);
+      const materialIds = Array.from(new Set(candidates.map((doc) => doc.id)));
+      const outcome = await requestWorkspaceGeneration(currentWorkspaceId, {
+        prompt,
+        materialIds,
+        confirmedMaterialIds: materialIds,
+      });
+      if (!outcome.ok) {
+        setGenerationError(outcome.error);
+        return;
+      }
+      setGenerated(outcome.material);
+      onGenerated(outcome.material);
+      setParts(emptyParts);
+      if (editorRef.current) editorRef.current.innerHTML = "";
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -370,39 +381,11 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
       {generating && (
         <div role="status" aria-live="polite" className="mt-4 flex items-center gap-2 text-sm text-gray-500">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          Finding the best source documents…
+          Finding source documents and generating your material…
         </div>
       )}
-      {confirmation && (
-        <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900">Confirm documents</h3>
-              <p className="mt-1 text-xs text-gray-500">These documents will be used to create your material.</p>
-            </div>
-            <button type="button" onClick={() => setConfirmation(null)} aria-label="Cancel document confirmation" className="text-gray-400 hover:text-gray-700">×</button>
-          </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Tagged documents</p>
-              {confirmation.explicit.length > 0 ? confirmation.explicit.map((doc) => <div key={doc.id} className="flex items-center gap-2 py-1 text-sm text-gray-800"><FileText className="h-4 w-4 text-indigo-500" />{doc.filename}</div>) : <p className="text-sm text-gray-400">None tagged</p>}
-            </div>
-            <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Suggested documents</p>
-              {confirmation.suggested.length > 0 ? confirmation.suggested.map((doc) => <div key={doc.id} className="flex items-center gap-2 py-1 text-sm text-gray-800"><FileText className="h-4 w-4 text-gray-400" />{doc.filename}</div>) : <p className="text-sm text-gray-400">No related documents found</p>}
-            </div>
-          </div>
-          <button type="button" onClick={() => void confirmGeneration()} disabled={confirming || [...confirmation.explicit, ...confirmation.suggested].filter(canUseSource).length === 0} className="mt-5 inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400">{confirming && <Loader2 className="h-4 w-4 animate-spin" />}Generate material</button>
-          {confirming && (
-            <div role="status" aria-live="polite" className="mt-4 flex items-start gap-3 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-indigo-900">
-              <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
-              <div>
-                <p className="text-sm font-medium">Generating your material…</p>
-                <p className="mt-0.5 text-xs text-indigo-700">Preparing selected sources and asking the AI to build the worksheet. This can take a moment.</p>
-              </div>
-            </div>
-          )}
-        </div>
+      {generationError && (
+        <p role="alert" className="mt-4 text-center text-sm text-rose-600">{generationError}</p>
       )}
       {generated && (
         <div className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 p-5">

@@ -9,7 +9,6 @@ import {
   boundMaterialIds,
   boundTeacherPrompt,
 } from "@/lib/teachers/generateRequest";
-import type { Worksheet } from "@/lib/teachers/worksheet";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,16 +22,6 @@ type GenerateRequestBody = {
   confirmedMaterialIds?: unknown;
 };
 
-type GenerateResponse = {
-  generatedMaterialId: string;
-  worksheet: Worksheet;
-  provider: string;
-  model: string;
-  sourceCharCount: number;
-  truncatedSource: boolean;
-  generatedAt: string;
-};
-
 function json(body: Record<string, unknown>, status: number) {
   return NextResponse.json(body, { status });
 }
@@ -41,10 +30,8 @@ function json(body: Record<string, unknown>, status: number) {
  * POST /api/teachers/workspaces/[workspaceId]/generate
  *
  * Multi-source worksheet generation for the Materials composer: the teacher
- * picks up to 12 documents (via `@` mentions or the confirmation panel) and
- * types a prompt; the server composes labeled sources from their EXTRACTED
- * text and calls the same validated DeepSeek provider as the per-material
- * route. The result lands in generated_materials as a first-class row.
+ * picks up to 12 documents from explicit `@` mentions plus workspace-ranked
+ * source discovery and queues generation after server-side validation.
  *
  * Guardrails, mirroring the per-material route's discipline:
  *   1. SSR session → 401; strict workspace UUID → 404.
@@ -216,9 +203,8 @@ export async function POST(
     );
   }
 
-  // Best-effort job bookkeeping, linked to the first source document. A
-  // failed insert must never block generation — log and continue.
-  let jobId: string | null = null;
+  // A generation job is durable bookkeeping, not an optional side effect:
+  // the server must have a job id before it can acknowledge the request.
   const { data: job, error: jobError } = await supabase
     .from("processing_jobs")
     .insert({
@@ -231,121 +217,89 @@ export async function POST(
     .single();
   if (jobError || !job) {
     console.error(
-      "TutorMonkey Teachers: workspace generate job insert failed (continuing without a job)",
+      "TutorMonkey Teachers: workspace generate job insert failed",
       workspaceId,
       jobError?.message,
     );
-  } else {
-    jobId = job.id;
-  }
-
-  let result;
-  try {
-    result = await generateWorksheetFromText({
-      sources,
-      teacherPrompt: prompt.prompt,
-    });
-  } catch (error) {
-    if (error instanceof WorksheetProviderError) {
-      console.error(
-        "TutorMonkey Teachers: workspace worksheet generation failed",
-        workspaceId,
-        error.code,
-        error.status,
-      );
-      const status = providerErrorStatus(error.code);
-      const message =
-        status === 503
-          ? error.message
-          : providerFacingMessage(error.code, error.message);
-      await markJobFailed(supabase, jobId, message);
-      return json({ error: message }, status);
-    }
-    console.error(
-      "TutorMonkey Teachers: workspace worksheet generation hit an unexpected error",
-      workspaceId,
-      error,
-    );
-    const message =
-      "Worksheet generation hit an unexpected error — please try again.";
-    await markJobFailed(supabase, jobId, message);
-    return json({ error: message }, 500);
-  }
-
-  // Provider resolved: the worksheet is validated. Persist the canonical
-  // row only now — never before validation.
-  const { data: generated, error: saveError } = await supabase
-    .from("generated_materials")
-    .insert({
-      workspace_id: workspaceId,
-      title: result.worksheet.title,
-      material_type: "worksheet",
-      content: result.worksheet,
-      source_document_ids: materialIds.ids,
-      provider: result.provider,
-      model: result.model,
-      ...(jobId ? { generation_job_id: jobId } : {}),
-    })
-    .select("id, created_at")
-    .single();
-
-  if (saveError || !generated) {
-    console.error(
-      "TutorMonkey Teachers: saving generated worksheet failed",
-      workspaceId,
-      saveError?.message,
-    );
-    if (saveError && isMissingTableError(saveError)) {
-      await markJobFailed(supabase, jobId, "generated_materials table missing");
-      return json(
-        {
-          error:
-            "Worksheet generation isn't available yet — the Teachers database migration that adds generated materials hasn't been applied to this project.",
-        },
-        503,
-      );
-    }
-    await markJobFailed(
-      supabase,
-      jobId,
-      "The worksheet was generated, but saving it to your workspace failed.",
-    );
     return json(
-      {
-        error:
-          "The worksheet was generated, but saving it to your workspace failed — please retry.",
-      },
+      { error: "Couldn't start worksheet generation — please try again." },
       500,
     );
   }
 
-  // Success is real: the canonical row exists. Job finalize is bookkeeping;
-  // if it fails, log and still report success (a 500 here would make the
-  // client retry and duplicate the saved material).
-  if (jobId) {
+  // Acknowledge only after the durable job exists. The server continues this
+  // task independently of the browser tab; the Materials view can poll the
+  // job and generated_materials row after reconnecting.
+  void completeGeneration({
+    supabase,
+    workspaceId,
+    materialIds: materialIds.ids,
+    prompt: prompt.prompt,
+    sources,
+    jobId: job.id,
+  });
+  return json({ jobId: job.id, status: "running" }, 202);
+}
+
+type CompleteGenerationOptions = {
+  supabase: SupabaseClient;
+  workspaceId: string;
+  materialIds: string[];
+  prompt: string;
+  sources: { label: string; text: string }[];
+  jobId: string;
+};
+
+async function completeGeneration({
+  supabase,
+  workspaceId,
+  materialIds,
+  prompt,
+  sources,
+  jobId,
+}: CompleteGenerationOptions): Promise<void> {
+  try {
+    const result = await generateWorksheetFromText({
+      sources,
+      teacherPrompt: prompt,
+    });
+    const { data: generated, error: saveError } = await supabase
+      .from("generated_materials")
+      .insert({
+        workspace_id: workspaceId,
+        title: result.worksheet.title,
+        material_type: "worksheet",
+        content: result.worksheet,
+        source_document_ids: materialIds,
+        provider: result.provider,
+        model: result.model,
+        generation_job_id: jobId,
+      })
+      .select("id, created_at")
+      .single();
+
+    if (saveError || !generated) {
+      const message = saveError && isMissingTableError(saveError)
+        ? "Worksheet generation isn't available yet — the Teachers database migration hasn't been applied to this project."
+        : "The worksheet was generated, but saving it to your workspace failed.";
+      await markJobFailed(supabase, jobId, message);
+      return;
+    }
+
     const { error: jobDoneError } = await supabase
       .from("processing_jobs")
       .update({ status: "succeeded", error: null })
       .eq("id", jobId);
     if (jobDoneError) {
-      console.error(
-        "TutorMonkey Teachers: workspace generate job completion failed (material is saved)",
-        generated.id,
-        jobDoneError.message,
-      );
+      console.error("TutorMonkey Teachers: generation job completion update failed", jobId, jobDoneError.message);
     }
+  } catch (error) {
+    const message = error instanceof WorksheetProviderError
+      ? (providerErrorStatus(error.code) === 503 ? error.message : providerFacingMessage(error.code, error.message))
+      : "Worksheet generation hit an unexpected error — please try again.";
+    console.error("TutorMonkey Teachers: background worksheet generation failed", workspaceId, error instanceof WorksheetProviderError ? error.code : error);
+    await markJobFailed(supabase, jobId, message);
   }
-
-  const response: GenerateResponse = {
-    generatedMaterialId: generated.id,
-    worksheet: result.worksheet,
-    provider: result.provider,
-    model: result.model,
-    sourceCharCount: result.sourceCharCount,
-    truncatedSource: result.truncatedSource,
-    generatedAt: generated.created_at,
-  };
-  return json(response as unknown as Record<string, unknown>, 200);
 }
 
 /** Parse the request body as JSON; null when unreadable or not an object. */

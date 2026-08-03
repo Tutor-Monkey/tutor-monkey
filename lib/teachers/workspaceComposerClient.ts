@@ -129,18 +129,7 @@ export type GeneratedComposerMaterial = {
 
 export type WorkspaceGenerationOutcome =
   | { ok: true; material: GeneratedComposerMaterial }
-  | {
-      ok: false;
-      error: string;
-      /** HTTP status (0 = network failure before a response). */
-      status: number;
-      /**
-       * True when the route answered 503 because the generated_materials
-       * table doesn't exist yet (Teachers migration not applied) — the UI
-       * renders the migration-pending state instead of a generic failure.
-       */
-      migrationPending: boolean;
-    };
+  | { ok: false; error: string; status: number; migrationPending: boolean };
 
 export type WorkspaceGenerationInput = {
   prompt: string;
@@ -176,10 +165,10 @@ function generationErrorForStatus(
 }
 
 /**
- * POST the workspace generate route with the confirmed source selection and
- * map the outcome for the UI. The route only resolves after the worksheet
- * is validated AND persisted; the response worksheet is re-validated here
- * (mirroring MaterialDetailModal) before it is ever rendered.
+  * POST the workspace generate route with explicit mentions plus workspace
+ * source discovery. The route acknowledges once the server has created a
+ * durable processing job, then this helper polls its status while the tab is
+ * open; completed rows remain available after reconnecting.
  */
 export async function requestWorkspaceGeneration(
   workspaceId: string,
@@ -195,80 +184,62 @@ export async function requestWorkspaceGeneration(
       },
     );
     const body = (await response.json().catch(() => null)) as
-      | {
-          error?: unknown;
-          generatedMaterialId?: unknown;
-          worksheet?: unknown;
-          provider?: unknown;
-          model?: unknown;
-          sourceCharCount?: unknown;
-          truncatedSource?: unknown;
-          generatedAt?: unknown;
-        }
+      | { error?: unknown; jobId?: unknown; status?: unknown; worksheet?: unknown; generatedMaterialId?: unknown; provider?: unknown; model?: unknown; sourceCharCount?: unknown; truncatedSource?: unknown; generatedAt?: unknown }
       | null;
 
-    if (!response.ok) {
-      const bodyError =
-        typeof body?.error === "string" && body.error.trim() !== ""
-          ? body.error
-          : null;
-      return {
-        ok: false,
-        error: generationErrorForStatus(response.status, bodyError),
-        status: response.status,
-        migrationPending: response.status === 503,
-      };
+    if (!response.ok && response.status !== 202) {
+      const bodyError = typeof body?.error === "string" && body.error.trim() !== "" ? body.error : null;
+      return { ok: false, error: generationErrorForStatus(response.status, bodyError), status: response.status, migrationPending: response.status === 503 };
     }
 
-    const worksheetValidation = validateWorksheet(body?.worksheet);
-    if (!worksheetValidation.ok) {
-      return {
-        ok: false,
-        error:
-          "The worksheet provider returned something we couldn't validate — try again.",
-        status: 200,
-        migrationPending: false,
-      };
+    const jobId = typeof body?.jobId === "string" ? body.jobId : "";
+    if (response.status !== 202 || jobId === "") {
+      return { ok: false, error: "Generation started, but the server didn't return a job id — please try again.", status: 502, migrationPending: false };
     }
 
-    const generatedMaterialId =
-      typeof body?.generatedMaterialId === "string"
-        ? body.generatedMaterialId
-        : "";
-    if (generatedMaterialId === "") {
-      return {
-        ok: false,
-        error:
-          "The worksheet was generated, but the server didn't return its saved id — please try again.",
-        status: 200,
-        migrationPending: false,
-      };
-    }
-
-    return {
-      ok: true,
-      material: {
-        generatedMaterialId,
-        worksheet: worksheetValidation.worksheet,
-        provider:
-          typeof body?.provider === "string" ? body.provider : "unknown",
-        model: typeof body?.model === "string" ? body.model : "unknown",
-        sourceCharCount:
-          typeof body?.sourceCharCount === "number" &&
-          Number.isFinite(body.sourceCharCount)
-            ? body.sourceCharCount
-            : 0,
-        truncatedSource: body?.truncatedSource === true,
-        generatedAt:
-          typeof body?.generatedAt === "string" ? body.generatedAt : "",
-      },
-    };
+    return await pollWorkspaceGeneration(workspaceId, jobId);
   } catch {
-    return {
-      ok: false,
-      error: "Couldn't reach the server — check your connection and try again.",
-      status: 0,
-      migrationPending: false,
-    };
+    return { ok: false, error: "Couldn't reach the server — check your connection and try again.", status: 0, migrationPending: false };
   }
+}
+
+async function pollWorkspaceGeneration(
+  workspaceId: string,
+  jobId: string,
+): Promise<WorkspaceGenerationOutcome> {
+  const deadline = Date.now() + 10 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      const response = await fetch(`/api/teachers/workspaces/${encodeURIComponent(workspaceId)}/generation-status?jobId=${encodeURIComponent(jobId)}`);
+      const body = (await response.json().catch(() => null)) as {
+        status?: unknown;
+        error?: unknown;
+        generated?: { generatedMaterialId?: unknown; worksheet?: unknown; provider?: unknown; model?: unknown; generatedAt?: unknown } | null;
+      } | null;
+      if (!response.ok) return { ok: false, error: "Couldn't check generation progress — refresh Materials to see the result.", status: response.status, migrationPending: false };
+      if (body?.status === "failed") return { ok: false, error: typeof body.error === "string" ? body.error : "Worksheet generation failed — please try again.", status: 500, migrationPending: false };
+      if (body?.status !== "succeeded" || !body.generated) continue;
+      const validation = validateWorksheet(body.generated.worksheet);
+      const generatedMaterialId = typeof body.generated.generatedMaterialId === "string" ? body.generated.generatedMaterialId : "";
+      if (!validation.ok || generatedMaterialId === "") return { ok: false, error: "The generated worksheet couldn't be validated — please try again.", status: 502, migrationPending: false };
+      return {
+        ok: true,
+        material: {
+          generatedMaterialId,
+          worksheet: validation.worksheet,
+          provider: typeof body.generated.provider === "string" ? body.generated.provider : "unknown",
+          model: typeof body.generated.model === "string" ? body.generated.model : "unknown",
+          sourceCharCount: 0,
+          truncatedSource: false,
+          generatedAt: typeof body.generated.generatedAt === "string" ? body.generated.generatedAt : "",
+        },
+      };
+    } catch {
+      // A transient reconnect failure should not turn a server-side job into a
+      // false failure. The Materials list will discover it after refresh.
+      continue;
+    }
+  }
+  return { ok: false, error: "Generation is still running in the background. Refresh Materials shortly to see the result.", status: 408, migrationPending: false };
 }
