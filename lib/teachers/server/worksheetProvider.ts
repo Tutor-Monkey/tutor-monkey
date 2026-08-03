@@ -26,13 +26,16 @@
 import {
   WORKSHEET_PROVIDER_NAME,
   WorksheetProviderError,
+  boundLabeledSources,
   buildChatCompletionsPayload,
   buildChatCompletionsUrl,
+  buildLabeledWorksheetUserPrompt,
   buildWorksheetSystemPrompt,
   buildWorksheetUserPrompt,
   mapHttpError,
   parseChatCompletion,
   resolveProviderConfig,
+  type LabeledSource,
   type ProviderEnv,
 } from "./worksheetProviderCore";
 import {
@@ -45,9 +48,24 @@ import {
 /** Hard cap on a single generation request, including the network call. */
 export const DEFAULT_GENERATION_TIMEOUT_MS = 60_000;
 
+/** One labeled source document fed to the provider (extracted text). */
+export type GenerateWorksheetSource = LabeledSource;
+
 export type GenerateWorksheetOptions = {
-  /** Extracted text of the material (bounded internally to MAX_GENERATION_SOURCE_CHARS). */
-  sourceText: string;
+  /**
+   * Extracted text of the material (bounded internally to
+   * MAX_GENERATION_SOURCE_CHARS). Legacy single-source path — kept for the
+   * per-material generate route and existing callers/tests.
+   */
+  sourceText?: string;
+  /**
+   * Multi-source path (workspace composer): labeled documents. When present
+   * (non-empty) this wins over `sourceText`; the combined text is bounded
+   * internally to MAX_GENERATION_SOURCE_CHARS with honest truncation.
+   */
+  sources?: readonly GenerateWorksheetSource[];
+  /** Optional teacher instructions appended to the user prompt. */
+  teacherPrompt?: string;
   /**
    * Env-shaped config source. Defaults to process.env; tests inject explicit
    * objects so no real secrets are involved.
@@ -85,16 +103,34 @@ export async function generateWorksheetFromText(
 
   // Bound the input up front: 120k chars keeps requests inside a standard
   // context window and the timeout honest. Truncation is flagged, never
-  // silent.
-  const { text: boundedText, truncated } = capSourceText(
-    options.sourceText,
-    MAX_GENERATION_SOURCE_CHARS,
-  );
+  // silent. Multi-source generations budget fairly across documents; the
+  // legacy single-source path truncates the tail of the one text.
+  let userPrompt: string;
+  let truncated: boolean;
+  let sourceCharCount: number;
+  if (options.sources && options.sources.length > 0) {
+    const bounded = boundLabeledSources(
+      options.sources,
+      MAX_GENERATION_SOURCE_CHARS,
+    );
+    truncated = bounded.truncated;
+    sourceCharCount = bounded.totalCharCount;
+    userPrompt = buildLabeledWorksheetUserPrompt({
+      sources: bounded.sources,
+      teacherPrompt: options.teacherPrompt,
+    });
+  } else {
+    const rawSource = options.sourceText ?? "";
+    const capped = capSourceText(rawSource, MAX_GENERATION_SOURCE_CHARS);
+    truncated = capped.truncated;
+    sourceCharCount = Array.from(rawSource).length;
+    userPrompt = buildWorksheetUserPrompt(capped.text);
+  }
 
   const payload = buildChatCompletionsPayload({
     model,
     systemPrompt: buildWorksheetSystemPrompt(),
-    userPrompt: buildWorksheetUserPrompt(boundedText),
+    userPrompt,
   });
 
   const controller = new AbortController();
@@ -181,7 +217,7 @@ export async function generateWorksheetFromText(
     worksheet: validation.worksheet,
     provider: WORKSHEET_PROVIDER_NAME,
     model,
-    sourceCharCount: Array.from(options.sourceText).length,
+    sourceCharCount,
     truncatedSource: truncated,
   };
 }

@@ -23,6 +23,7 @@ import {
   requestWorksheetGeneration,
   type GenerateWorksheetOutcome,
 } from "@/lib/teachers/generateClient";
+import { MaterialsComposer } from "@/components/teachers/MaterialsComposer";
 import {
   MaterialDetailModal,
   type MaterialSummary,
@@ -220,6 +221,15 @@ export function MaterialsView({
           />
         </button>
       </div>
+
+      {isReady && currentWorkspace && (
+        <div className="mb-8">
+          <MaterialsComposer
+            currentWorkspaceId={currentWorkspace.id}
+            onGenerated={() => void loadMaterials()}
+          />
+        </div>
+      )}
 
       {schemaStatus === "not-applied" && (
         <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 animate-fade-in">

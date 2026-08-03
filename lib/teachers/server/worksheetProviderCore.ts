@@ -216,6 +216,99 @@ export function buildWorksheetUserPrompt(sourceText: string): string {
   ].join("\n");
 }
 
+// ---------------------------------------------------------------------------
+// Multi-source + teacher-prompt support (workspace composer slice)
+// ---------------------------------------------------------------------------
+
+/** One labeled source document embedded in the user prompt. */
+export type LabeledSource = {
+  /** Human-readable document label (filename); never extracted text. */
+  label: string;
+  /** The (bounded) extracted text of that document. */
+  text: string;
+};
+
+/**
+ * Bound a list of labeled sources to `maxChars` total characters.
+ *
+ * Fair per-source budgeting keeps one giant handout from starving every
+ * other source: each source gets at most `maxChars / sourceCount` characters
+ * from the tail, and once the budget is exhausted later sources are dropped
+ * entirely. `truncated` is set whenever anything was cut, and
+ * `totalCharCount` reports the ORIGINAL combined length so provenance can
+ * stay honest about what was requested vs. what was sent. Pure.
+ */
+export function boundLabeledSources(
+  sources: readonly LabeledSource[],
+  maxChars: number,
+): { sources: LabeledSource[]; truncated: boolean; totalCharCount: number } {
+  const totalCharCount = sources.reduce(
+    (sum, source) => sum + Array.from(source.text).length,
+    0,
+  );
+  if (sources.length === 0 || totalCharCount <= maxChars) {
+    return {
+      sources: sources.map((source) => ({ ...source })),
+      truncated: false,
+      totalCharCount,
+    };
+  }
+
+  const perSourceBudget = Math.floor(maxChars / sources.length);
+  const bounded: LabeledSource[] = [];
+  let remaining = maxChars;
+  let truncated = false;
+
+  for (const source of sources) {
+    if (remaining <= 0) {
+      truncated = true;
+      break;
+    }
+    const budget = Math.min(perSourceBudget, remaining);
+    const text = Array.from(source.text).slice(0, budget).join("");
+    if (Array.from(source.text).length > budget) truncated = true;
+    bounded.push({ label: source.label, text });
+    remaining -= budget;
+  }
+
+  return { sources: bounded, truncated, totalCharCount };
+}
+
+/**
+ * The user prompt for a multi-source generation with an optional teacher
+ * prompt. Each source is embedded under its own label (a document filename —
+ * never provenance), followed by the teacher's instructions when provided.
+ * The texts must already be bounded (boundLabeledSources) — this builder
+ * never truncates, it only assembles.
+ */
+export function buildLabeledWorksheetUserPrompt(input: {
+  sources: readonly LabeledSource[];
+  teacherPrompt?: string;
+}): string {
+  const blocks = input.sources.map((source, index) =>
+    [
+      `SOURCE ${index + 1} — ${source.label} (${Array.from(source.text).length} characters):`,
+      '"""',
+      source.text,
+      '"""',
+    ].join("\n"),
+  );
+
+  const parts = [
+    "Create a worksheet from the following source material(s).",
+    "",
+    ...blocks,
+  ];
+
+  const teacherPrompt = input.teacherPrompt?.trim();
+  if (teacherPrompt && teacherPrompt !== "") {
+    parts.push("", "TEACHER INSTRUCTIONS:", teacherPrompt);
+  }
+
+  parts.push("", "Now produce the worksheet JSON object.");
+  return parts.join("\n");
+}
+
 export type ParsedChatCompletion = {
   /** The raw JSON string the model produced in choices[0].message.content. */
   content: string;
