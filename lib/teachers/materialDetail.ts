@@ -102,14 +102,6 @@ export function shortDate(iso: string): string {
   });
 }
 
-/** Human-readable label for the per-material extract action. */
-export function extractActionLabel(status: MaterialStatus): string {
-  if (status === "ready") return "Re-extract";
-  if (status === "failed") return "Retry extract";
-  if (status === "processing") return "Retry extract";
-  return "Extract text";
-}
-
 /**
  * Is this filename one the local extractor can read? Anything outside
  * EXTRACTABLE_EXTENSIONS (legacy .doc/.ppt, unknown extensions, no
@@ -161,7 +153,8 @@ type DescribeExtractionInput = {
  *   3. processing    – extraction is in flight.
  *   4. not a local upload – Google Drive imports can't be extracted yet.
  *   5. uploaded      – never attempted: unsupported formats are called out
- *                      up front, everything else gets the "extract me" state.
+ *                      up front; everything else gets the automatic-parse
+ *                      pending state (parsing starts on upload, once).
  */
 export function describeExtractionState(
   input: DescribeExtractionInput,
@@ -176,7 +169,7 @@ export function describeExtractionState(
       kind: "failed",
       message: recordedError
         ? recordedError
-        : "Extraction failed — run Extract again to retry.",
+        : "Extraction failed — this file's text couldn't be read. Try uploading it again.",
     };
   }
 
@@ -203,7 +196,7 @@ export function describeExtractionState(
     return {
       kind: "no-text",
       message:
-        "This material is marked ready, but no extracted text was saved — run Extract again to re-read the file.",
+        "This material is marked ready, but no extracted text was saved — try uploading it again to re-read the file.",
     };
   }
 
@@ -211,7 +204,7 @@ export function describeExtractionState(
     return {
       kind: "processing",
       message:
-        "Extraction is running — give it a moment, then reopen this material.",
+        "Text extraction is running — give it a moment, then reopen this material.",
     };
   }
 
@@ -230,7 +223,7 @@ export function describeExtractionState(
   return {
     kind: "not-extracted",
     message:
-      "This file is uploaded but hasn't been read yet. Click “Extract text” to read it on the server — no third-party service is used.",
+      "This file was uploaded but text extraction hasn't run yet — parsing starts automatically right after upload.",
   };
 }
 
@@ -294,20 +287,20 @@ export function describeGenerationState(
       return {
         kind: "unavailable",
         message:
-          "This material failed to extract — fix extraction before generating a worksheet.",
+          "This material failed to parse — worksheet generation needs its extracted text.",
       };
     }
     if (status === "processing") {
       return {
         kind: "unavailable",
         message:
-          "Extraction is still running — worksheet generation becomes available once the text is ready.",
+          "Text extraction is still running — worksheet generation becomes available once the text is ready.",
       };
     }
     return {
       kind: "unavailable",
       message:
-        "Extract text first — worksheet generation needs the material's extracted text.",
+        "This material hasn't been parsed yet — worksheet generation needs its extracted text.",
     };
   }
 
@@ -344,7 +337,7 @@ export function describeGenerationState(
     return {
       kind: "unavailable",
       message:
-        "No extracted text is saved for this material — run Extract first.",
+        "No extracted text is saved for this material — try uploading it again.",
     };
   }
 

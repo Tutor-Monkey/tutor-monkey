@@ -20,7 +20,6 @@ import { formatBytes } from "@/lib/teachers/materials";
 import {
   describeExtractionState,
   describeGenerationState,
-  extractActionLabel,
   generateActionLabel,
   shortDate,
   type ExtractionProvenance,
@@ -83,9 +82,6 @@ type MaterialDetailModalProps = {
   material: MaterialSummary;
   schemaStatus: TeachersSchemaStatus;
   onClose: () => void;
-  onExtract: (
-    materialId: string,
-  ) => Promise<{ ok: boolean; error?: string }>;
   onGenerate: (materialId: string) => Promise<GenerateWorksheetOutcome>;
 };
 
@@ -110,24 +106,24 @@ function workspaceTitleOf(
  * guard is the workspace RLS policies, never a client-side check. No
  * service-role key, no new server route.
  *
- * The extraction section is driven by describeExtractionState (pure helper,
- * lib/teachers/materialDetail.ts): uploaded-but-not-extracted files get a
- * real empty state, legacy .doc/.ppt and Google Drive imports get an honest
- * unsupported notice, failures show the route's message verbatim, and only a
- * row that actually has provenance.extraction.text claims "ready".
+ * Extraction is automatic and one-time (it starts the moment a file is
+ * uploaded, on the server), so this view has no Extract/Re-extract control —
+ * it only reports the parse outcome honestly. The extraction section is
+ * driven by describeExtractionState (pure helper, lib/teachers/materialDetail.ts):
+ * uploaded-but-not-parsed files get a real empty state, legacy .doc/.ppt and
+ * Google Drive imports get an honest unsupported notice, failures show the
+ * route's message verbatim, and only a row that actually has
+ * provenance.extraction.text claims "ready".
  */
 export function MaterialDetailModal({
   material,
   schemaStatus,
   onClose,
-  onExtract,
   onGenerate,
 }: MaterialDetailModalProps) {
   const [detail, setDetail] = useState<MaterialDetailRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [extractError, setExtractError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   // The worksheet returned by the most recent successful generation, shown
@@ -208,25 +204,8 @@ export function MaterialDetailModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  async function handleExtract() {
-    if (busy || generating || !detail) return;
-    setBusy(true);
-    setExtractError(null);
-    const outcome = await onExtract(detail.id);
-    if (outcome.ok) {
-      // The route is synchronous, but refetch so the fresh provenance
-      // (counts + text) appears without the teacher reopening the modal.
-      await loadDetail(detail.id);
-    } else {
-      setExtractError(
-        outcome.error ?? "Extraction failed — please try again.",
-      );
-    }
-    setBusy(false);
-  }
-
   async function handleGenerate() {
-    if (generating || busy || !detail) return;
+    if (generating || !detail) return;
     setGenerating(true);
     setGenerateError(null);
     const outcome = await onGenerate(detail.id);
@@ -617,16 +596,12 @@ export function MaterialDetailModal({
         <div className="flex flex-col-reverse items-stretch gap-2 border-t border-gray-100 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="flex items-start gap-1.5 text-xs text-gray-500 font-light">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true" />
-            Text is read on the server through your session. Worksheet generation
-            runs on the server through the configured DeepSeek provider and
-            never exposes its key to the browser.
+            Text extraction runs automatically after upload, on the server
+            through your session. Worksheet generation runs on the server
+            through the configured DeepSeek provider and never exposes its
+            key to the browser.
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            {extractError && (
-              <p role="alert" className="max-w-[240px] text-xs text-red-600 font-light">
-                {extractError}
-              </p>
-            )}
             {generateError && (
               <p role="alert" className="max-w-[240px] text-xs text-red-600 font-light">
                 {generateError}
@@ -639,24 +614,11 @@ export function MaterialDetailModal({
             >
               Close
             </button>
-            <button
-              type="button"
-              onClick={() => void handleExtract()}
-              disabled={!isReady || busy || !detail || loading}
-              className="shrink-0 inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-xs font-medium text-white shadow-sm transition-all duration-300 hover:bg-gray-800 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {busy ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-              ) : (
-                <ScanText className="h-3.5 w-3.5" aria-hidden="true" />
-              )}
-              {busy ? "Extracting…" : extractActionLabel(material.status)}
-            </button>
             {canGenerate && (
               <button
                 type="button"
                 onClick={() => void handleGenerate()}
-                disabled={!isReady || generating || busy || !detail || loading}
+                disabled={!isReady || generating || !detail || loading}
                 className="shrink-0 inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-xs font-medium text-white shadow-sm transition-all duration-300 hover:bg-gray-800 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {generating ? (

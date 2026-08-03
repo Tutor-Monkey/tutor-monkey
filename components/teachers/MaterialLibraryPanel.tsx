@@ -6,7 +6,6 @@ import {
   Eye,
   Info,
   Library,
-  Loader2,
   RefreshCw,
   ScanText,
 } from "lucide-react";
@@ -17,7 +16,6 @@ import {
   formatBytes,
 } from "@/lib/teachers/materials";
 import {
-  extractActionLabel,
   parseExtractionCount,
   shortDate,
   type MaterialStatus,
@@ -48,14 +46,15 @@ type MaterialLibraryPanelProps = {
 
 /**
  * Material library — the authenticated list of uploaded materials with a
- * per-material "Review" (open) action and an "Extract text" action.
+ * per-material "Review" (open) action and worksheet generation.
  *
- * Extraction runs on the server (POST /api/teachers/materials/[id]/extract)
- * using the user's session: the file is read from private storage under RLS
- * and text is extracted in-process — no third-party service. Every row shows
- * its real status (uploaded / extracting / ready / failed) and failures are
- * shown verbatim (the route's message, e.g. "…is an old Word document…"),
- * never hidden behind a generic "try again".
+ * Extraction is automatic and one-time: it runs on the server
+ * (POST /api/teachers/materials/[id]/extract) the moment a file is
+ * uploaded, so there is deliberately no Extract/Re-extract button here (or
+ * in the review modal). Every row shows its real status
+ * (uploaded / extracting / ready / failed) and failures are shown verbatim
+ * (the route's message, e.g. "…is an old Word document…"), never hidden
+ * behind a generic "try again".
  *
  * Payload hygiene: the list query projects only the extraction *counts* and
  * the last error message out of the provenance JSONB (`->>`), never the full
@@ -69,8 +68,6 @@ export function MaterialLibraryPanel({
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [extractingId, setExtractingId] = useState<string | null>(null);
-  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [detailMaterial, setDetailMaterial] = useState<MaterialSummary | null>(
     null,
   );
@@ -140,53 +137,6 @@ export function MaterialLibraryPanel({
     }
   }, [isReady, loadMaterials]);
 
-  /**
-   * Runs extraction for one material and reports the outcome so callers (the
-   * row button and the review modal) can show the route's error verbatim.
-   * The list is reloaded either way so statuses stay fresh.
-   */
-  async function runExtraction(
-    materialId: string,
-  ): Promise<{ ok: boolean; error?: string }> {
-    if (extractingId) {
-      return { ok: false, error: "Extraction is already running." };
-    }
-    setExtractingId(materialId);
-    setRowErrors((previous) => {
-      const next = { ...previous };
-      delete next[materialId];
-      return next;
-    });
-
-    try {
-      const response = await fetch(
-        `/api/teachers/materials/${materialId}/extract`,
-        { method: "POST" },
-      );
-      const body = (await response.json().catch(() => null)) as {
-        error?: string;
-      } | null;
-
-      if (!response.ok) {
-        const message =
-          body?.error ?? "Extraction failed — please try again.";
-        setRowErrors((previous) => ({ ...previous, [materialId]: message }));
-        return { ok: false, error: message };
-      }
-      // The route is synchronous, so the list is already up to date; reload
-      // anyway so statuses (and any error recorded server-side) are fresh.
-      await loadMaterials();
-      return { ok: true };
-    } catch {
-      const message =
-        "Couldn't reach the server — check your connection and try again.";
-      setRowErrors((previous) => ({ ...previous, [materialId]: message }));
-      return { ok: false, error: message };
-    } finally {
-      setExtractingId(null);
-    }
-  }
-
   async function runGeneration(
     materialId: string,
   ): Promise<GenerateWorksheetOutcome> {
@@ -244,9 +194,8 @@ export function MaterialLibraryPanel({
               Material library
             </h2>
             <p className="text-sm text-gray-500 font-light">
-              Extract readable text from uploaded materials — runs on the
-              server with your session, never sent to a third-party service.
-              Open a material to review its extracted text.
+              Every upload is parsed automatically, once, on the server with
+              your session — open a material to review its extracted text.
             </p>
           </div>
         </div>
@@ -276,7 +225,7 @@ export function MaterialLibraryPanel({
 
       <div className="flex flex-wrap gap-2 mb-5">
         <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">
-          Extracts: {EXTRACTABLE_EXTENSIONS.join(" ")}
+          Auto-parses: {EXTRACTABLE_EXTENSIONS.join(" ")}
         </span>
         <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">
           .doc / .ppt not supported yet
@@ -320,8 +269,8 @@ export function MaterialLibraryPanel({
             No materials yet
           </p>
           <p className="text-sm text-gray-500 font-light">
-            Upload files in the Import materials panel — then come back here
-            to extract and review their text.
+            Upload files in the Import materials panel — parsing starts
+            automatically, then come back here to review their text.
           </p>
         </div>
       )}
@@ -329,9 +278,7 @@ export function MaterialLibraryPanel({
       {materials.length > 0 && (
         <ul className="space-y-2">
           {materials.map((material) => {
-            const lastError =
-              rowErrors[material.id] ?? material.lastErrorMessage ?? null;
-            const busy = extractingId === material.id;
+            const lastError = material.lastErrorMessage ?? null;
 
             return (
               <li
@@ -398,22 +345,6 @@ export function MaterialLibraryPanel({
                     <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                     Review
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void runExtraction(material.id)}
-                    disabled={!isReady || busy || extractingId !== null}
-                    className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 shadow-sm transition-all duration-300 hover:bg-gray-50 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {busy ? (
-                      <Loader2
-                        className="h-3.5 w-3.5 animate-spin"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <ScanText className="h-3.5 w-3.5" aria-hidden="true" />
-                    )}
-                    {busy ? "Extracting…" : extractActionLabel(material.status)}
-                  </button>
                 </div>
               </li>
             );
@@ -423,8 +354,8 @@ export function MaterialLibraryPanel({
 
       <p className="mt-4 flex items-start gap-2 text-xs text-gray-500 font-light">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
-        Extraction reads the file through your session and runs entirely on
-        the server — text is saved to your workspace, and failures are shown
+        Uploaded documents are parsed automatically, exactly once, when they
+        are uploaded — text is saved to your workspace and failures are shown
         here honestly. Extracted text loads only when you open a material.
       </p>
 
@@ -433,7 +364,6 @@ export function MaterialLibraryPanel({
           material={detailMaterial}
           schemaStatus={schemaStatus}
           onClose={() => setDetailMaterial(null)}
-          onExtract={runExtraction}
           onGenerate={runGeneration}
         />
       )}

@@ -3,7 +3,6 @@ import {
   describeExtractionState,
   describeGenerationState,
   describeUnsupportedMaterialFormat,
-  extractActionLabel,
   generateActionLabel,
   isExtractableFile,
   parseExtractionCount,
@@ -46,15 +45,6 @@ describe("shortDate", () => {
   it("returns an empty string for unparseable input", () => {
     expect(shortDate("")).toBe("");
     expect(shortDate("not-a-date")).toBe("");
-  });
-});
-
-describe("extractActionLabel", () => {
-  it("labels each status honestly", () => {
-    expect(extractActionLabel("uploaded")).toBe("Extract text");
-    expect(extractActionLabel("ready")).toBe("Re-extract");
-    expect(extractActionLabel("failed")).toBe("Retry extract");
-    expect(extractActionLabel("processing")).toBe("Retry extract");
   });
 });
 
@@ -144,7 +134,8 @@ describe("describeExtractionState", () => {
     });
     expect(state.kind).toBe("not-extracted");
     if (state.kind !== "not-extracted") return;
-    expect(state.message).toMatch(/hasn't been read yet/i);
+    expect(state.message).toMatch(/automatically/i);
+    expect(state.message).toMatch(/upload/i);
   });
 
   it("calls out legacy .doc files before they are ever tried", () => {
@@ -202,7 +193,7 @@ describe("describeExtractionState", () => {
     });
     expect(state.kind).toBe("failed");
     if (state.kind !== "failed") return;
-    expect(state.message).toMatch(/retry/i);
+    expect(state.message).toMatch(/uploading it again/i);
   });
 
   it("reports processing without claiming success", () => {
@@ -260,12 +251,12 @@ describe("describeGenerationState", () => {
     });
     expect(uploaded.kind).toBe("unavailable");
     if (uploaded.kind !== "unavailable") return;
-    expect(uploaded.message).toMatch(/extract text first/i);
+    expect(uploaded.message).toMatch(/hasn't been parsed yet/i);
 
     const failed = describeGenerationState({ status: "failed" });
     expect(failed.kind).toBe("unavailable");
     if (failed.kind !== "unavailable") return;
-    expect(failed.message).toMatch(/failed to extract/i);
+    expect(failed.message).toMatch(/failed to parse/i);
 
     const processing = describeGenerationState({ status: "processing" });
     expect(processing.kind).toBe("unavailable");

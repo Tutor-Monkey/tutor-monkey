@@ -2,22 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Navigation from "@/components/Navigation";
-import Footer from "@/components/Footer";
-import {
-  Upload,
-  FolderTree,
-  PenLine,
-  FileDown,
-  LogOut,
-  Sparkles,
-  Clock3,
-  ArrowRight,
-  Inbox,
-} from "lucide-react";
+import { ArrowRight, Clock3, Inbox, Sparkles } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useTeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
+import { TeachersAppShell } from "@/components/teachers/TeachersAppShell";
 import { CreateWorkspacePanel } from "@/components/teachers/CreateWorkspacePanel";
 import { MaterialsIntakePanel } from "@/components/teachers/MaterialsIntakePanel";
 import { MaterialLibraryPanel } from "@/components/teachers/MaterialLibraryPanel";
@@ -27,33 +16,16 @@ type AuthState =
   | { status: "signedOut" }
   | { status: "signedIn"; session: Session };
 
-const workspaceFeatures = [
-  {
-    icon: Upload,
-    title: "Import materials",
-    description:
-      "Drop in PDFs, slide decks, handouts, and notes — TutorMonkey will read your materials as-is.",
-  },
-  {
-    icon: FolderTree,
-    title: "Course library",
-    description:
-      "File everything by course, unit, and topic so your library mirrors your syllabus.",
-  },
-  {
-    icon: PenLine,
-    title: "Generate worksheets",
-    description:
-      "New handouts written in your voice, with matching answer keys, ready to print.",
-  },
-  {
-    icon: FileDown,
-    title: "Export & share",
-    description:
-      "Download classroom-ready PDFs with answer keys included — print, post, or share.",
-  },
-];
-
+/**
+ * Teachers dashboard — an immersive, full-screen application shell.
+ *
+ * Unlike the public /teachers launcher (which keeps the main-site
+ * Navigation/Footer), this page renders NO main-site chrome: the whole
+ * viewport (100dvh) is the app. The signed-in surface lives inside
+ * TeachersAppShell (topbar + sidebar + mobile drawer); the loading and
+ * signed-out states are full-screen too. Google auth/session handling and
+ * the workspace / material library panels are unchanged.
+ */
 export default function TeachersDashboardPage() {
   const [authState, setAuthState] = useState<AuthState>({
     status: "loading",
@@ -115,150 +87,84 @@ export default function TeachersDashboardPage() {
     authState.status === "signedIn" ? authState.session.user.email : null;
 
   return (
-    <main className="min-h-screen bg-white">
-      <Navigation />
-
-      <section className="pt-36 pb-24 px-6">
-        <div className="max-w-5xl mx-auto">
-          {authState.status === "loading" && (
-            <div className="flex flex-col items-center gap-4 py-24 text-gray-500 animate-fade-in">
-              <Clock3 className="h-8 w-8 animate-pulse" aria-hidden="true" />
-              <p className="font-light">Loading your workspace…</p>
-            </div>
-          )}
-
-          {authState.status === "signedOut" && (
-            <div className="max-w-md mx-auto text-center animate-fade-in-up">
-              <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-900">
-                <Inbox className="h-7 w-7" aria-hidden="true" />
-              </div>
-              <h1 className="text-4xl font-light text-gray-900 mb-4 font-display text-balance">
-                You&apos;re signed out
-              </h1>
-              <p className="text-lg text-gray-600 font-light mb-8">
-                Sign in with your Google account to open your Teachers
-                workspace.
-              </p>
-              <Link
-                href="/teachers/sign-in"
-                className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-7 py-3.5 text-base font-medium text-white shadow-sm transition-all duration-300 hover:bg-gray-800 hover:shadow-md"
-              >
-                Sign in with Google
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </div>
-          )}
-
-          {authState.status === "signedIn" && (
-            <>
-              {/* Header */}
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-12 animate-fade-in-up">
-                <div>
-                  <p className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-1.5 text-sm font-medium text-gray-600 mb-4">
-                    <Sparkles className="h-4 w-4 text-gray-500" aria-hidden="true" />
-                    TutorMonkey Teachers · Dashboard
-                  </p>
-                  <h1 className="text-4xl md:text-5xl font-light text-gray-900 mb-3 font-display text-balance">
-                    Welcome back{email ? `, ${email.split("@")[0]}` : ""}
-                  </h1>
-                  {email && (
-                    <p className="text-lg text-gray-600 font-light">
-                      Signed in as{" "}
-                      <span className="font-medium text-gray-900">{email}</span>
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex flex-col items-start md:items-end gap-3">
-                  <button
-                    type="button"
-                    onClick={handleSignOut}
-                    className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-all duration-300 hover:bg-gray-50 hover:shadow-md"
-                  >
-                    <LogOut className="h-4 w-4" aria-hidden="true" />
-                    Sign out
-                  </button>
-                  {signOutError && (
-                    <p role="alert" className="text-sm text-red-600 font-light">
-                      {signOutError}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Workspace creation + materials intake */}
-              <div className="grid lg:grid-cols-2 gap-8 mb-16 animate-fade-in-up animation-delay-200">
-                <CreateWorkspacePanel
-                  schemaStatus={schemaStatus}
-                  userId={authState.session.user.id}
-                />
-                <MaterialsIntakePanel
-                  schemaStatus={schemaStatus}
-                  userId={authState.session.user.id}
-                />
-              </div>
-
-              {/* Material library: local text extraction for uploads */}
-              <div className="mb-16 animate-fade-in-up animation-delay-300">
-                <MaterialLibraryPanel schemaStatus={schemaStatus} />
-              </div>
-
-              {/* Roadmap: next product surfaces */}
-              <div className="animate-fade-in-up animation-delay-400">
-                <h2 className="text-2xl md:text-3xl font-light text-gray-900 mb-2 font-display text-balance">
-                  What&apos;s next
-                </h2>
-                <p className="text-gray-600 font-light max-w-xl mb-8">
-                  The pieces that turn your workspace into a worksheet machine.
-                </p>
-
-                <div className="grid sm:grid-cols-2 gap-6">
-                  {workspaceFeatures.map((feature) => (
-                    <div
-                      key={feature.title}
-                      className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm hover-lift"
-                    >
-                      <div className="flex items-center justify-between mb-5">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-900">
-                          <feature.icon className="h-5 w-5" aria-hidden="true" />
-                        </div>
-                        <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                          On the roadmap
-                        </span>
-                      </div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        {feature.title}
-                      </h3>
-                      <p className="text-sm leading-relaxed text-gray-600 font-light">
-                        {feature.description}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                <p className="mt-8 text-sm text-gray-500 font-light">
-                  {schemaStatus === "ready"
-                    ? "Workspaces and uploads you save go to Supabase under your account — uploads land in the workspace you explicitly pick. Text extraction for uploaded materials is live now; worksheet generation lands in the next milestone."
-                    : "The Teachers database migration (supabase/migrations/) is written but not applied yet — this page degrades gracefully until it is."}
-                </p>
-              </div>
-
-              {/* Back link */}
-              <div className="mt-10 text-center">
-                <Link
-                  href="/teachers"
-                  className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900 transition-colors font-medium"
-                >
-                  <ArrowRight className="h-4 w-4 rotate-180" aria-hidden="true" />
-                  Back to the Teachers overview
-                </Link>
-              </div>
-            </>
-          )}
+    <>
+      {authState.status === "loading" && (
+        <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-gray-50 px-6 text-gray-500">
+          <Clock3 className="h-8 w-8 animate-pulse" aria-hidden="true" />
+          <p className="font-light">Loading your workspace…</p>
         </div>
-      </section>
+      )}
 
-      <Footer />
-    </main>
+      {authState.status === "signedOut" && (
+        <div className="flex h-dvh items-center justify-center bg-gray-50 px-6">
+          <div className="w-full max-w-md text-center animate-fade-in-up">
+            <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-900">
+              <Inbox className="h-7 w-7" aria-hidden="true" />
+            </div>
+            <h1 className="mb-4 font-display text-4xl font-light text-balance text-gray-900">
+              You&apos;re signed out
+            </h1>
+            <p className="mb-8 text-lg font-light text-gray-600">
+              Sign in with your Google account to open your Teachers
+              workspace.
+            </p>
+            <Link
+              href="/teachers/sign-in"
+              className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-7 py-3.5 text-base font-medium text-white shadow-sm transition-all duration-300 hover:bg-gray-800 hover:shadow-md"
+            >
+              Sign in with Google
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {authState.status === "signedIn" && (
+        <TeachersAppShell
+          email={email ?? null}
+          schemaStatus={schemaStatus}
+          signOutError={signOutError}
+          onSignOut={() => void handleSignOut()}
+        >
+          {/* Overview header */}
+          <section id="overview" className="mb-8 animate-fade-in-up">
+            <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-1.5 text-sm font-medium text-gray-600">
+              <Sparkles className="h-4 w-4 text-gray-500" aria-hidden="true" />
+              TutorMonkey Teachers · Dashboard
+            </p>
+            <h1 className="mb-3 font-display text-3xl font-light text-balance text-gray-900 md:text-4xl">
+              Welcome back{email ? `, ${email.split("@")[0]}` : ""}
+            </h1>
+            {email && (
+              <p className="text-base font-light text-gray-600">
+                Signed in as{" "}
+                <span className="font-medium text-gray-900">{email}</span>
+              </p>
+            )}
+          </section>
+
+          {/* Workspace creation + materials intake */}
+          <div className="mb-8 grid gap-6 lg:grid-cols-2">
+            <div id="workspaces" className="min-w-0">
+              <CreateWorkspacePanel
+                schemaStatus={schemaStatus}
+                userId={authState.session.user.id}
+              />
+            </div>
+            <div id="import" className="min-w-0">
+              <MaterialsIntakePanel
+                schemaStatus={schemaStatus}
+                userId={authState.session.user.id}
+              />
+            </div>
+          </div>
+
+          {/* Material library: auto-parsed uploads, review + generation */}
+          <div id="materials" className="mb-8 min-w-0">
+            <MaterialLibraryPanel schemaStatus={schemaStatus} />
+          </div>
+        </TeachersAppShell>
+      )}
+    </>
   );
 }

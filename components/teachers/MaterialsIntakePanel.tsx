@@ -18,6 +18,7 @@ import type { TeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
 import {
   ACCEPTED_EXTENSIONS,
   ACCEPTED_TYPES_LABEL,
+  EXTRACTABLE_EXTENSIONS,
   MAX_FILE_SIZE_LABEL,
   TEACHERS_MATERIALS_BUCKET,
   buildMaterialObjectPath,
@@ -26,7 +27,27 @@ import {
   validateMaterialFile,
 } from "@/lib/teachers/materials";
 
-type FileStatus = "idle" | "uploading" | "uploaded" | "error";
+/**
+ * Per-file lifecycle. Extraction is automatic and one-time: once a file is
+ * stored and its materials row exists, parsing starts immediately with no
+ * manual step (and no re-parse action anywhere in the UI).
+ *
+ *   idle → uploading → parsing → parsed            (happy path)
+ *                       ↓           ↓
+ *                 parse_failed   upload_failed
+ *
+ * `uploaded` is a brief transient between the row insert and the extract
+ * POST; the UI reports it textually ("Uploaded — extracting text…") while
+ * the status is `parsing`.
+ */
+type FileStatus =
+  | "idle"
+  | "uploading"
+  | "uploaded"
+  | "parsing"
+  | "parsed"
+  | "upload_failed"
+  | "parse_failed";
 
 type SelectedFile = {
   file: File;
@@ -44,7 +65,7 @@ type WorkspaceRow = {
 type BucketStatus = "checking" | "ready" | "not-applied";
 
 type BatchResult = {
-  uploaded: number;
+  parsed: number;
   failed: number;
   workspaceTitle: string;
 };
@@ -84,15 +105,21 @@ function describeUploadError(
 }
 
 /**
- * Materials intake panel — real local uploads via Supabase Storage.
+ * Materials intake panel — real local uploads via Supabase Storage with
+ * automatic, one-time text extraction.
  *
  * A file is only reported as uploaded once BOTH writes succeeded:
  *   1. the object lands in the private `teachers-materials` bucket under
  *      {workspace_id}/{material_id}/{filename}, and
- *   2. the public.materials row referencing it is inserted.
+ *   2. the public.materials row referencing it is inserted — the insert
+ *      returns the new material id (`.select("id").single()`), which is
+ *      used to POST /api/teachers/materials/[id]/extract immediately.
  * If the DB insert fails after a successful upload, the object is removed
  * again so no orphaned file is left behind. Every file gets its own status
- * line (selected → uploading → uploaded, or a per-file error).
+ * line (selected → uploading → parsing → parsed, or an honest per-file
+ * error). Parse failures show the route's message verbatim — the UI never
+ * claims "parsed" on failure, and there is deliberately no re-extract
+ * action: parsing happens exactly once, right after upload.
  *
  * The target workspace is always explicit: the user picks one from their own
  * workspace list. There is no silent workspace fallback. When the schema
@@ -206,7 +233,7 @@ export function MaterialsIntakePanel({
     index: number,
     workspace: WorkspaceRow,
     batchId: string,
-  ): Promise<"uploaded" | "failed"> {
+  ): Promise<"parsed" | "failed"> {
     const path = buildMaterialObjectPath(workspace.id, item.file.name);
     const contentType = resolveMaterialMimeType(item.file);
 
@@ -227,30 +254,35 @@ export function MaterialsIntakePanel({
         item.file.name,
         uploadError.message,
       );
-      setFileStatus(index, "error", describeUploadError(uploadError));
+      setFileStatus(index, "upload_failed", describeUploadError(uploadError));
       return "failed";
     }
 
-    // 2) DB write — success is only claimed once BOTH writes landed.
-    const { error: insertError } = await supabase.from("materials").insert({
-      workspace_id: workspace.id,
-      source_type: "local_upload",
-      original_filename: item.file.name,
-      storage_path: path,
-      mime_type: contentType,
-      byte_size: item.file.size,
-      status: "uploaded",
-      provenance: {
-        uploaded_by: userId,
-        upload_batch: batchId,
-      },
-    });
+    // 2) DB write — success is only claimed once BOTH writes landed, and the
+    //    insert returns the new material id so parsing can start immediately.
+    const { data: inserted, error: insertError } = await supabase
+      .from("materials")
+      .insert({
+        workspace_id: workspace.id,
+        source_type: "local_upload",
+        original_filename: item.file.name,
+        storage_path: path,
+        mime_type: contentType,
+        byte_size: item.file.size,
+        status: "uploaded",
+        provenance: {
+          uploaded_by: userId,
+          upload_batch: batchId,
+        },
+      })
+      .select("id")
+      .single();
 
-    if (insertError) {
+    if (insertError || !inserted) {
       console.error(
         "TutorMonkey Teachers: materials insert failed after upload",
         item.file.name,
-        insertError.message,
+        insertError?.message,
       );
       // Clean up the orphaned object so we don't leave a file with no record.
       try {
@@ -261,12 +293,54 @@ export function MaterialsIntakePanel({
         // Best-effort cleanup only; the row never existed, so nothing else
         // references the object.
       }
-      setFileStatus(index, "error", describeUploadError(insertError));
+      setFileStatus(index, "upload_failed", describeUploadError(insertError));
       return "failed";
     }
 
+    const materialId = inserted.id;
+
+    // 3) Automatic, one-time extraction — the only parse this file ever
+    //    gets. No manual Extract/Re-extract/Retry control exists anywhere;
+    //    a parse failure is reported honestly with the route's message.
     setFileStatus(index, "uploaded", null, workspace.title);
-    return "uploaded";
+    setFileStatus(index, "parsing");
+
+    try {
+      const response = await fetch(
+        `/api/teachers/materials/${materialId}/extract`,
+        { method: "POST" },
+      );
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        const message =
+          body?.error ??
+          "Text extraction failed — the file is uploaded but couldn't be read.";
+        console.error(
+          "TutorMonkey Teachers: automatic extraction failed",
+          item.file.name,
+          materialId,
+          message,
+        );
+        setFileStatus(index, "parse_failed", message, workspace.title);
+        return "failed";
+      }
+
+      setFileStatus(index, "parsed", null, workspace.title);
+      return "parsed";
+    } catch {
+      const message =
+        "Couldn't reach the extraction service — the file is uploaded, but text extraction didn't complete.";
+      console.error(
+        "TutorMonkey Teachers: automatic extraction request failed",
+        item.file.name,
+        materialId,
+      );
+      setFileStatus(index, "parse_failed", message, workspace.title);
+      return "failed";
+    }
   }
 
   async function handleUpload() {
@@ -283,7 +357,7 @@ export function MaterialsIntakePanel({
       .filter(
         ({ item }) =>
           !item.validationError &&
-          (item.status === "idle" || item.status === "error"),
+          (item.status === "idle" || item.status === "upload_failed"),
       );
     if (uploadable.length === 0) return;
 
@@ -301,12 +375,12 @@ export function MaterialsIntakePanel({
       ),
     );
 
-    const uploaded = outcomes.filter(
-      (outcome) => outcome === "uploaded",
+    const parsed = outcomes.filter(
+      (outcome) => outcome === "parsed",
     ).length;
     setBatchResult({
-      uploaded,
-      failed: outcomes.length - uploaded,
+      parsed,
+      failed: outcomes.length - parsed,
       workspaceTitle: workspace.title,
     });
     setUploading(false);
@@ -319,15 +393,15 @@ export function MaterialsIntakePanel({
   const uploadableCount = selectedFiles.filter(
     (item) =>
       !item.validationError &&
-      (item.status === "idle" || item.status === "error"),
+      (item.status === "idle" || item.status === "upload_failed"),
   ).length;
-  const uploadedCount = selectedFiles.filter(
-    (item) => item.status === "uploaded",
+  const doneCount = selectedFiles.filter((item) =>
+    ["parsed", "parse_failed", "upload_failed"].includes(item.status),
   ).length;
-  const anyUploaded = uploadedCount > 0;
-  const hasRetries = selectedFiles.some(
-    (item) => item.status === "error" && !item.validationError,
-  );
+  const retryableCount = selectedFiles.filter(
+    (item) => item.status === "upload_failed" && !item.validationError,
+  ).length;
+  const anyFinished = doneCount > 0;
 
   const statusPill =
     schemaStatus === "checking" || bucketStatus === "checking"
@@ -347,23 +421,23 @@ export function MaterialsIntakePanel({
         : !selectedWorkspaceId
           ? "Select a workspace first"
           : uploading
-            ? `Uploading ${uploadedCount}/${batchTotal}…`
+            ? `Processing ${doneCount}/${batchTotal}…`
             : uploadableCount === 0
-              ? anyUploaded
-                ? "All files uploaded"
+              ? anyFinished
+                ? "All files processed"
                 : "Select files to upload"
-              : hasRetries
-                ? `Retry ${uploadableCount} file${uploadableCount === 1 ? "" : "s"}`
+              : retryableCount > 0
+                ? `Retry ${retryableCount} upload${retryableCount === 1 ? "" : "s"}`
                 : `Upload ${uploadableCount} file${uploadableCount === 1 ? "" : "s"}`;
 
   const uploadNote = !isReady
     ? "The Teachers database migration (supabase/migrations/) isn't applied yet — uploads are disabled until it is."
     : !bucketReady
       ? "The storage migration (supabase/migrations/) isn't applied yet — the teachers-materials bucket doesn't exist, so uploads are disabled."
-      : "Files upload to the teachers-materials bucket and are recorded in your workspace. Success is only shown once both the file and its record are saved — if the record can't be saved, the uploaded file is removed again.";
+      : "Files upload to the teachers-materials bucket and are recorded in your workspace. Text extraction runs automatically, once, right after the upload — no manual step needed. If extraction fails, the file stays in your library with the failure shown honestly.";
 
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-6 md:p-8 shadow-sm">
+    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm md:p-8">
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-900">
@@ -374,7 +448,8 @@ export function MaterialsIntakePanel({
               Import materials
             </h2>
             <p className="text-sm text-gray-500 font-light">
-              Upload documents into a workspace — files are kept private.
+              Upload documents into a workspace — text is extracted
+              automatically, right after upload.
             </p>
           </div>
         </div>
@@ -395,6 +470,12 @@ export function MaterialsIntakePanel({
         </span>
         <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">
           {MAX_FILE_SIZE_LABEL}
+        </span>
+        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">
+          Auto-parses: {EXTRACTABLE_EXTENSIONS.join(" ")}
+        </span>
+        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-600">
+          .doc / .ppt upload only
         </span>
       </div>
 
@@ -496,73 +577,94 @@ export function MaterialsIntakePanel({
 
       {selectedFiles.length > 0 && (
         <ul className="mt-5 space-y-2">
-          {selectedFiles.map((item, index) => (
-            <li
-              key={`${item.file.name}-${index}`}
-              className="flex items-start justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3"
-            >
-              <div className="flex min-w-0 items-start gap-3">
-                {item.status === "uploading" ? (
-                  <Loader2
-                    className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-gray-400"
-                    aria-hidden="true"
-                  />
-                ) : item.status === "uploaded" ? (
-                  <CheckCircle2
-                    className="mt-0.5 h-4 w-4 shrink-0 text-green-600"
-                    aria-hidden="true"
-                  />
-                ) : item.status === "error" ? (
-                  <AlertTriangle
-                    className="mt-0.5 h-4 w-4 shrink-0 text-red-600"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <FileText
-                    className="mt-0.5 h-4 w-4 shrink-0 text-gray-400"
-                    aria-hidden="true"
-                  />
-                )}
-                <div className="min-w-0">
-                  <p
-                    className="truncate text-sm font-medium text-gray-900"
-                    title={item.file.name}
-                  >
-                    {item.file.name}
-                  </p>
-                  <p
-                    className={`mt-0.5 text-xs font-light ${
-                      item.validationError || item.error
-                        ? "text-red-600"
-                        : item.status === "uploaded"
-                          ? "text-green-700"
-                          : "text-gray-500"
-                    }`}
-                  >
-                    {formatBytes(item.file.size)}
-                    {item.validationError
-                      ? ` · ${item.validationError}`
-                      : item.status === "uploading"
-                        ? " · Uploading…"
-                        : item.status === "uploaded"
-                          ? ` · Uploaded to “${item.uploadedTo}”`
-                          : item.error
-                            ? ` · ${item.error}`
-                            : " · Selected"}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => removeFile(index)}
-                disabled={uploading}
-                aria-label={`Remove ${item.file.name}`}
-                className="shrink-0 rounded-full p-1.5 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+          {selectedFiles.map((item, index) => {
+            const uploadFailed = item.status === "upload_failed";
+            const parseFailed = item.status === "parse_failed";
+            const parsed = item.status === "parsed";
+            const inFlight =
+              item.status === "uploading" ||
+              item.status === "uploaded" ||
+              item.status === "parsing";
+
+            return (
+              <li
+                key={`${item.file.name}-${index}`}
+                className="flex items-start justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3"
               >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </li>
-          ))}
+                <div className="flex min-w-0 items-start gap-3">
+                  {inFlight ? (
+                    <Loader2
+                      className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-gray-400"
+                      aria-hidden="true"
+                    />
+                  ) : parsed ? (
+                    <CheckCircle2
+                      className="mt-0.5 h-4 w-4 shrink-0 text-green-600"
+                      aria-hidden="true"
+                    />
+                  ) : parseFailed ? (
+                    <AlertTriangle
+                      className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+                      aria-hidden="true"
+                    />
+                  ) : uploadFailed ? (
+                    <AlertTriangle
+                      className="mt-0.5 h-4 w-4 shrink-0 text-red-600"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <FileText
+                      className="mt-0.5 h-4 w-4 shrink-0 text-gray-400"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <p
+                      className="truncate text-sm font-medium text-gray-900"
+                      title={item.file.name}
+                    >
+                      {item.file.name}
+                    </p>
+                    <p
+                      className={`mt-0.5 text-xs font-light ${
+                        item.validationError || uploadFailed
+                          ? "text-red-600"
+                          : parseFailed
+                            ? "text-amber-700"
+                            : parsed
+                              ? "text-green-700"
+                              : "text-gray-500"
+                      }`}
+                    >
+                      {formatBytes(item.file.size)}
+                      {item.validationError
+                        ? ` · ${item.validationError}`
+                        : item.status === "uploading"
+                          ? " · Uploading…"
+                          : item.status === "parsing"
+                            ? ` · Uploaded to “${item.uploadedTo}” — extracting text…`
+                            : parsed
+                              ? ` · Uploaded to “${item.uploadedTo}” · Text extracted`
+                              : parseFailed
+                                ? ` · Uploaded to “${item.uploadedTo}” · Text extraction failed: ${item.error}`
+                                : uploadFailed
+                                  ? ` · ${item.error}`
+                                  : " · Selected"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeFile(index)}
+                  disabled={uploading}
+                  aria-label={`Remove ${item.file.name}`}
+                  className="shrink-0 rounded-full p-1.5 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -574,7 +676,7 @@ export function MaterialsIntakePanel({
           title={
             !canUpload
               ? "Pick a workspace and wait for the schema + storage migrations to be applied"
-              : "Upload the selected files to the chosen workspace"
+              : "Upload the selected files to the chosen workspace — text is extracted automatically"
           }
           className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gray-900 px-6 py-3 text-sm font-medium text-white shadow-sm transition-all duration-300 hover:bg-gray-800 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -601,10 +703,10 @@ export function MaterialsIntakePanel({
               />
             )}
             {batchResult.failed === 0
-              ? `${batchResult.uploaded} file${
-                  batchResult.uploaded === 1 ? "" : "s"
-                } uploaded to “${batchResult.workspaceTitle}”.`
-              : `${batchResult.uploaded} uploaded, ${batchResult.failed} failed — see the per-file messages above.`}
+              ? `${batchResult.parsed} file${
+                  batchResult.parsed === 1 ? "" : "s"
+                } uploaded and parsed in “${batchResult.workspaceTitle}”.`
+              : `${batchResult.parsed} uploaded and parsed, ${batchResult.failed} failed — see the per-file messages above.`}
           </p>
         )}
 

@@ -1,0 +1,204 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  FolderPlus,
+  GraduationCap,
+  LayoutDashboard,
+  Library,
+  LogOut,
+  Menu,
+  UploadCloud,
+  X,
+} from "lucide-react";
+import type { TeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
+
+type TeachersAppShellProps = {
+  email: string | null;
+  schemaStatus: TeachersSchemaStatus;
+  signOutError?: string | null;
+  onSignOut: () => void;
+  children: React.ReactNode;
+};
+
+const navItems = [
+  { href: "#overview", label: "Overview", icon: LayoutDashboard },
+  { href: "#workspaces", label: "Workspaces", icon: FolderPlus },
+  { href: "#import", label: "Import", icon: UploadCloud },
+  { href: "#materials", label: "Materials", icon: Library },
+];
+
+function statusLabel(schemaStatus: TeachersSchemaStatus): string {
+  if (schemaStatus === "checking") return "Checking";
+  if (schemaStatus === "not-applied") return "Migration pending";
+  return "Ready";
+}
+
+/**
+ * Full-screen chrome for the Teachers application — the immersive dashboard
+ * shell. Deliberately renders NO main-site Navigation/Footer: the whole
+ * viewport (100dvh) belongs to the app. Desktop gets a sidebar + topbar;
+ * mobile collapses the sidebar into a slide-over drawer opened from the
+ * topbar. Auth/session handling stays in the page; the shell only receives
+ * the signed-in surface (email, sign-out, schema status) plus the page body.
+ */
+export function TeachersAppShell({
+  email,
+  schemaStatus,
+  signOutError,
+  onSignOut,
+  children,
+}: TeachersAppShellProps) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const renderNav = (closeOnClick: boolean) => (
+    <nav className="flex flex-col gap-1 px-3 py-4" aria-label="Workspace navigation">
+      {navItems.map((item) => (
+        <a
+          key={item.href}
+          href={item.href}
+          onClick={closeOnClick ? () => setDrawerOpen(false) : undefined}
+          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
+        >
+          <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {item.label}
+        </a>
+      ))}
+    </nav>
+  );
+
+  return (
+    <div className="flex h-dvh flex-col bg-gray-50">
+      {/* Topbar */}
+      <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-gray-200 bg-white px-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open navigation"
+            className="shrink-0 rounded-xl border border-gray-200 bg-white p-2.5 text-gray-500 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-900 lg:hidden"
+          >
+            <Menu className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <Link href="/teachers/dashboard" className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-900 text-white">
+              <GraduationCap className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <span className="min-w-0 leading-tight">
+              <span className="block truncate text-sm font-semibold text-gray-900">
+                TutorMonkey Teachers
+              </span>
+              <span className="block truncate text-[11px] font-light text-gray-500">
+                Workspace
+              </span>
+            </span>
+          </Link>
+        </div>
+
+        <div className="flex min-w-0 shrink-0 items-center gap-3">
+          <span
+            className={`hidden shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide sm:inline-flex ${
+              schemaStatus === "ready"
+                ? "bg-gray-900 text-white"
+                : "bg-gray-100 text-gray-500"
+            }`}
+          >
+            {statusLabel(schemaStatus)}
+          </span>
+          {email && (
+            <span
+              className="hidden max-w-[220px] truncate text-sm font-light text-gray-600 md:block"
+              title={email}
+            >
+              {email}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="inline-flex shrink-0 items-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-all duration-300 hover:bg-gray-50 hover:shadow-md"
+          >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline">Sign out</span>
+          </button>
+        </div>
+      </header>
+
+      {signOutError && (
+        <p
+          role="alert"
+          className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm font-light text-red-600 sm:px-6"
+        >
+          {signOutError}
+        </p>
+      )}
+
+      <div className="flex min-h-0 flex-1">
+        {/* Desktop sidebar */}
+        <aside className="hidden w-60 shrink-0 flex-col border-r border-gray-200 bg-white lg:flex">
+          <div className="flex-1 overflow-y-auto">{renderNav(false)}</div>
+          <div className="border-t border-gray-100 p-4">
+            <Link
+              href="/teachers"
+              className="flex items-center gap-2 text-xs font-medium text-gray-500 transition-colors hover:text-gray-900"
+            >
+              <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              Back to the Teachers overview
+            </Link>
+          </div>
+        </aside>
+
+        {/* Mobile slide-over drawer */}
+        {drawerOpen && (
+          <div className="fixed inset-0 z-40 lg:hidden" role="presentation">
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setDrawerOpen(false)}
+              aria-hidden="true"
+            />
+            <aside
+              role="dialog"
+              aria-modal="true"
+              aria-label="Workspace navigation"
+              className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                <span className="text-sm font-semibold text-gray-900">
+                  TutorMonkey Teachers
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDrawerOpen(false)}
+                  aria-label="Close navigation"
+                  className="rounded-xl p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">{renderNav(true)}</div>
+              <div className="border-t border-gray-100 p-4">
+                <Link
+                  href="/teachers"
+                  onClick={() => setDrawerOpen(false)}
+                  className="flex items-center gap-2 text-xs font-medium text-gray-500 transition-colors hover:text-gray-900"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  Back to the Teachers overview
+                </Link>
+              </div>
+            </aside>
+          </div>
+        )}
+
+        {/* Content */}
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-10">
+            {children}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
