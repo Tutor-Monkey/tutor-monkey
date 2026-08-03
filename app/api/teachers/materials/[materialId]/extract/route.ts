@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { TEACHERS_MATERIALS_BUCKET } from "@/lib/teachers/materials";
-import {
-  UnsupportedFormatError,
-  extractTextFromBuffer,
-} from "@/lib/teachers/extract";
+import { LlamaParseError, parseWithLlamaParse } from "@/lib/teachers/llamaParse";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,15 +40,12 @@ function json(body: Record<string, unknown>, status: number) {
  *   3. The private storage object is downloaded through the same
  *      authenticated client; storage RLS re-checks workspace membership on
  *      the object path.
- *   4. Text is extracted in-process (txt/md/docx/pdf/pptx; .doc/.ppt get an
- *      honest unsupported error). No third-party processing service is ever
- *      called and the service-role key is never used.
- *   5. Only after validation (workspace access + stored file present +
- *      downloadable) is a processing_jobs row created and the material
- *      marked "processing". Success flips the material to "ready" with the
- *      extracted text + provenance in materials.provenance; any failure
- *      leaves the job "failed" with the error recorded — we never claim
- *      complete on failure.
+ *   4. The stored bytes are sent server-to-server to LlamaParse, which returns
+ *      normalized Markdown for PDFs, scans, DOCX, PPTX, and other supported
+ *      document formats. The API key is never sent to the browser.
+ *   5. Only after the provider returns readable content is the material marked
+ *      "ready". Provider failures leave the job/material failed with a
+ *      user-readable error.
  */
 export async function POST(
   _request: Request,
@@ -197,29 +191,25 @@ export async function POST(
 
   let result;
   try {
-    result = await extractTextFromBuffer(material.original_filename, buffer);
-    if (material.original_filename.toLowerCase().endsWith(".pdf") && result.text.trim() === "") {
-      throw new UnsupportedFormatError(
-        "This PDF contains no selectable text. It may be scanned or image-only; run OCR or upload a text-based PDF.",
-      );
-    }
+    result = await parseWithLlamaParse(
+      material.original_filename,
+      buffer,
+      material.mime_type,
+    );
   } catch (error) {
-    if (!(error instanceof UnsupportedFormatError)) {
+    if (!(error instanceof LlamaParseError)) {
       console.error(
-        "TutorMonkey Teachers: extraction failed",
+        "TutorMonkey Teachers: LlamaParse extraction failed",
         material.id,
         error,
       );
     }
     const message =
-      error instanceof UnsupportedFormatError
+      error instanceof LlamaParseError
         ? error.message
-        : "Extraction hit an unexpected error — this file may be damaged.";
+        : "LlamaParse extraction failed — please retry this document.";
     await recordExtractionFailure(supabase, material, job.id, message);
-    return json(
-      { error: message },
-      error instanceof UnsupportedFormatError ? 422 : 500,
-    );
+    return json({ error: message }, 502);
   }
 
   // Success: record provenance + status, then close the job. The extracted
@@ -235,7 +225,7 @@ export async function POST(
     text: result.text,
     char_count: result.charCount,
     word_count: result.wordCount,
-    extractor: "tutormonkey-local-v1",
+    extractor: result.provider,
     extracted_at: now,
     job_id: job.id,
   };
