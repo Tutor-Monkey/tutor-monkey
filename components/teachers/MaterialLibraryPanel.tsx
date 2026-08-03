@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
-  CheckCircle2,
-  FileText,
+  Eye,
   Info,
   Library,
   Loader2,
@@ -17,25 +16,27 @@ import {
   EXTRACTABLE_EXTENSIONS,
   formatBytes,
 } from "@/lib/teachers/materials";
-
-type MaterialStatus = "uploaded" | "processing" | "ready" | "failed";
-
-type MaterialProvenance = {
-  extraction?: {
-    char_count?: number;
-    word_count?: number;
-    text?: string;
-    extracted_at?: string;
-  };
-  last_error?: { stage?: string; message?: string; at?: string };
-};
+import {
+  extractActionLabel,
+  parseExtractionCount,
+  shortDate,
+  type MaterialStatus,
+} from "@/lib/teachers/materialDetail";
+import { MaterialStatusBadge } from "@/components/teachers/MaterialStatusBadge";
+import {
+  MaterialDetailModal,
+  type MaterialSummary,
+} from "@/components/teachers/MaterialDetailModal";
 
 type MaterialRow = {
   id: string;
   original_filename: string;
   byte_size: number | null;
   status: MaterialStatus;
-  provenance: MaterialProvenance | null;
+  /** Normalized from provenance.extraction.char_count via a `->>` projection. */
+  charCount: number | null;
+  /** Normalized from provenance.last_error.message via a `->>` projection. */
+  lastErrorMessage: string | null;
   created_at: string;
   workspace_title: string;
 };
@@ -44,52 +45,9 @@ type MaterialLibraryPanelProps = {
   schemaStatus: TeachersSchemaStatus;
 };
 
-function shortDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function StatusBadge({ status }: { status: MaterialStatus }) {
-  if (status === "ready") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-[11px] font-semibold text-green-800">
-        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-        Ready
-      </span>
-    );
-  }
-  if (status === "processing") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-semibold text-blue-800">
-        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-        Extracting
-      </span>
-    );
-  }
-  if (status === "failed") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-[11px] font-semibold text-red-800">
-        <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-        Failed
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-semibold text-gray-600">
-      <FileText className="h-3 w-3" aria-hidden="true" />
-      Uploaded
-    </span>
-  );
-}
-
 /**
  * Material library — the authenticated list of uploaded materials with a
- * per-material "Extract text" action.
+ * per-material "Review" (open) action and an "Extract text" action.
  *
  * Extraction runs on the server (POST /api/teachers/materials/[id]/extract)
  * using the user's session: the file is read from private storage under RLS
@@ -97,6 +55,12 @@ function StatusBadge({ status }: { status: MaterialStatus }) {
  * its real status (uploaded / extracting / ready / failed) and failures are
  * shown verbatim (the route's message, e.g. "…is an old Word document…"),
  * never hidden behind a generic "try again".
+ *
+ * Payload hygiene: the list query projects only the extraction *counts* and
+ * the last error message out of the provenance JSONB (`->>`), never the full
+ * extracted text. The full text is fetched on demand, RLS-scoped, when the
+ * teacher opens a material in the review modal — so a 10 MB handout doesn't
+ * ride along with every list refresh.
  */
 export function MaterialLibraryPanel({
   schemaStatus,
@@ -106,6 +70,9 @@ export function MaterialLibraryPanel({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [extractingId, setExtractingId] = useState<string | null>(null);
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+  const [detailMaterial, setDetailMaterial] = useState<MaterialSummary | null>(
+    null,
+  );
 
   const isReady = schemaStatus === "ready";
 
@@ -119,7 +86,7 @@ export function MaterialLibraryPanel({
       const { data, error } = await supabase
         .from("materials")
         .select(
-          "id, original_filename, byte_size, status, provenance, created_at, workspace_id, course_workspaces(title)",
+          "id, original_filename, byte_size, status, created_at, workspace_id, course_workspaces(title), provenance->extraction->>char_count, provenance->extraction->>word_count, provenance->last_error->>message",
         )
         .order("created_at", { ascending: false })
         .limit(50);
@@ -148,7 +115,11 @@ export function MaterialLibraryPanel({
               original_filename: row.original_filename,
               byte_size: row.byte_size,
               status: row.status as MaterialStatus,
-              provenance: (row.provenance ?? null) as MaterialProvenance | null,
+              charCount: parseExtractionCount(row.char_count),
+              lastErrorMessage:
+                typeof row.message === "string" && row.message.trim() !== ""
+                  ? row.message
+                  : null,
               created_at: row.created_at,
               workspace_title: courseTitle ?? "Workspace",
             };
@@ -168,18 +139,27 @@ export function MaterialLibraryPanel({
     }
   }, [isReady, loadMaterials]);
 
-  async function runExtraction(material: MaterialRow) {
-    if (extractingId) return;
-    setExtractingId(material.id);
+  /**
+   * Runs extraction for one material and reports the outcome so callers (the
+   * row button and the review modal) can show the route's error verbatim.
+   * The list is reloaded either way so statuses stay fresh.
+   */
+  async function runExtraction(
+    materialId: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (extractingId) {
+      return { ok: false, error: "Extraction is already running." };
+    }
+    setExtractingId(materialId);
     setRowErrors((previous) => {
       const next = { ...previous };
-      delete next[material.id];
+      delete next[materialId];
       return next;
     });
 
     try {
       const response = await fetch(
-        `/api/teachers/materials/${material.id}/extract`,
+        `/api/teachers/materials/${materialId}/extract`,
         { method: "POST" },
       );
       const body = (await response.json().catch(() => null)) as {
@@ -187,21 +167,20 @@ export function MaterialLibraryPanel({
       } | null;
 
       if (!response.ok) {
-        setRowErrors((previous) => ({
-          ...previous,
-          [material.id]:
-            body?.error ?? "Extraction failed — please try again.",
-        }));
+        const message =
+          body?.error ?? "Extraction failed — please try again.";
+        setRowErrors((previous) => ({ ...previous, [materialId]: message }));
+        return { ok: false, error: message };
       }
       // The route is synchronous, so the list is already up to date; reload
       // anyway so statuses (and any error recorded server-side) are fresh.
       await loadMaterials();
+      return { ok: true };
     } catch {
-      setRowErrors((previous) => ({
-        ...previous,
-        [material.id]:
-          "Couldn't reach the server — check your connection and try again.",
-      }));
+      const message =
+        "Couldn't reach the server — check your connection and try again.";
+      setRowErrors((previous) => ({ ...previous, [materialId]: message }));
+      return { ok: false, error: message };
     } finally {
       setExtractingId(null);
     }
@@ -213,13 +192,6 @@ export function MaterialLibraryPanel({
       : schemaStatus === "not-applied"
         ? "Migration pending"
         : "Ready";
-
-  const actionLabelFor = (status: MaterialStatus): string => {
-    if (status === "ready") return "Re-extract";
-    if (status === "failed") return "Retry extract";
-    if (status === "processing") return "Retry extract";
-    return "Extract text";
-  };
 
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-6 md:p-8 shadow-sm">
@@ -235,6 +207,7 @@ export function MaterialLibraryPanel({
             <p className="text-sm text-gray-500 font-light">
               Extract readable text from uploaded materials — runs on the
               server with your session, never sent to a third-party service.
+              Open a material to review its extracted text.
             </p>
           </div>
         </div>
@@ -309,7 +282,7 @@ export function MaterialLibraryPanel({
           </p>
           <p className="text-sm text-gray-500 font-light">
             Upload files in the Import materials panel — then come back here
-            to extract their text.
+            to extract and review their text.
           </p>
         </div>
       )}
@@ -317,22 +290,18 @@ export function MaterialLibraryPanel({
       {materials.length > 0 && (
         <ul className="space-y-2">
           {materials.map((material) => {
-            const charCount =
-              material.provenance?.extraction?.char_count ?? null;
             const lastError =
-              rowErrors[material.id] ??
-              material.provenance?.last_error?.message ??
-              null;
+              rowErrors[material.id] ?? material.lastErrorMessage ?? null;
             const busy = extractingId === material.id;
 
             return (
               <li
                 key={material.id}
-                className="flex items-start justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3"
+                className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
               >
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <FileText
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Eye
                       className="h-4 w-4 shrink-0 text-gray-400"
                       aria-hidden="true"
                     />
@@ -342,7 +311,7 @@ export function MaterialLibraryPanel({
                     >
                       {material.original_filename}
                     </p>
-                    <StatusBadge status={material.status} />
+                    <MaterialStatusBadge status={material.status} />
                   </div>
                   <p className="mt-1 text-xs text-gray-500 font-light">
                     {material.workspace_title}
@@ -352,8 +321,8 @@ export function MaterialLibraryPanel({
                     {material.created_at
                       ? ` · ${shortDate(material.created_at)}`
                       : ""}
-                    {charCount != null && material.status === "ready"
-                      ? ` · ${charCount.toLocaleString()} characters extracted`
+                    {material.charCount != null && material.status === "ready"
+                      ? ` · ${material.charCount.toLocaleString()} characters extracted`
                       : ""}
                   </p>
                   {lastError && (
@@ -369,22 +338,44 @@ export function MaterialLibraryPanel({
                     </p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void runExtraction(material)}
-                  disabled={!isReady || busy || extractingId !== null}
-                  className="shrink-0 inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 shadow-sm transition-all duration-300 hover:bg-gray-50 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {busy ? (
-                    <Loader2
-                      className="h-3.5 w-3.5 animate-spin"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <ScanText className="h-3.5 w-3.5" aria-hidden="true" />
-                  )}
-                  {busy ? "Extracting…" : actionLabelFor(material.status)}
-                </button>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDetailMaterial({
+                        id: material.id,
+                        original_filename: material.original_filename,
+                        byte_size: material.byte_size,
+                        status: material.status,
+                        charCount: material.charCount,
+                        lastErrorMessage: material.lastErrorMessage,
+                        created_at: material.created_at,
+                        workspace_title: material.workspace_title,
+                      })
+                    }
+                    disabled={!isReady}
+                    className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 shadow-sm transition-all duration-300 hover:bg-gray-50 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                    Review
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void runExtraction(material.id)}
+                    disabled={!isReady || busy || extractingId !== null}
+                    className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 shadow-sm transition-all duration-300 hover:bg-gray-50 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {busy ? (
+                      <Loader2
+                        className="h-3.5 w-3.5 animate-spin"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <ScanText className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                    {busy ? "Extracting…" : extractActionLabel(material.status)}
+                  </button>
+                </div>
               </li>
             );
           })}
@@ -395,8 +386,17 @@ export function MaterialLibraryPanel({
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
         Extraction reads the file through your session and runs entirely on
         the server — text is saved to your workspace, and failures are shown
-        here honestly.
+        here honestly. Extracted text loads only when you open a material.
       </p>
+
+      {detailMaterial && (
+        <MaterialDetailModal
+          material={detailMaterial}
+          schemaStatus={schemaStatus}
+          onClose={() => setDetailMaterial(null)}
+          onExtract={runExtraction}
+        />
+      )}
     </section>
   );
 }
