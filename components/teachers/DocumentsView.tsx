@@ -263,6 +263,14 @@ export function DocumentsView({
           </button>
           <GoogleDriveImportButton
             mode="files"
+            label="Import Drive files"
+            onPicked={handleDrivePicked}
+            onGateChange={setDriveGate}
+            disabled={!isReady || !currentWorkspace}
+          />
+          <GoogleDriveImportButton
+            mode="folders"
+            label="Import a Drive folder"
             onPicked={handleDrivePicked}
             onGateChange={setDriveGate}
             disabled={!isReady || !currentWorkspace}

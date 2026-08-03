@@ -47,6 +47,8 @@ type GoogleDriveImportButtonProps = {
   mode?: GoogleDriveSelectionMode;
   /** Extra disabling from the parent (e.g. no workspace selected). */
   disabled?: boolean;
+  /** Button label override for folder-vs-file actions. */
+  label?: string;
   /** Typed callback with the picked file/folder ids + metadata. */
   onPicked: (picks: GoogleDrivePick[]) => void;
   /** Lift the gate up so the parent can render the setup banner. */
@@ -55,6 +57,7 @@ type GoogleDriveImportButtonProps = {
 
 export function GoogleDriveImportButton({
   mode = "files",
+  label = "Import from Drive",
   disabled = false,
   onPicked,
   onGateChange,
@@ -150,7 +153,7 @@ export function GoogleDriveImportButton({
         ) : (
           <Cloud className="h-4 w-4" aria-hidden="true" />
         )}
-        Import from Drive
+        {label}
       </button>
       {pickerError && (
         <p
