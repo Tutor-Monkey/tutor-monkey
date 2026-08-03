@@ -376,7 +376,7 @@ function providerFacingMessage(
     return "Worksheet generation is busy right now — try again in a moment.";
   }
   if (code === "INVALID_RESPONSE") {
-    return "The worksheet provider returned something we couldn't validate — try again.";
+    return providerMessage;
   }
   if (code === "MISSING_CONFIGURATION" || code === "MISSING_API_KEY") {
     return providerMessage;
