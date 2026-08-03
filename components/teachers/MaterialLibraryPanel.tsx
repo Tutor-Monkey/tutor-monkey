@@ -25,6 +25,7 @@ import {
 import { MaterialStatusBadge } from "@/components/teachers/MaterialStatusBadge";
 import {
   MaterialDetailModal,
+  type GenerateWorksheetOutcome,
   type MaterialSummary,
 } from "@/components/teachers/MaterialDetailModal";
 
@@ -183,6 +184,44 @@ export function MaterialLibraryPanel({
       return { ok: false, error: message };
     } finally {
       setExtractingId(null);
+    }
+  }
+
+  async function runGeneration(
+    materialId: string,
+  ): Promise<GenerateWorksheetOutcome> {
+    try {
+      const response = await fetch(
+        `/api/teachers/materials/${materialId}/generate`,
+        { method: "POST" },
+      );
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+        worksheet?: GenerateWorksheetOutcome["worksheet"];
+        model?: string;
+        truncatedSource?: boolean;
+      } | null;
+
+      if (!response.ok) {
+        return {
+          ok: false,
+          error:
+            body?.error ?? "Worksheet generation failed — please try again.",
+        };
+      }
+      await loadMaterials();
+      return {
+        ok: true,
+        worksheet: body?.worksheet,
+        model: body?.model ?? null,
+        truncatedSource: body?.truncatedSource === true,
+      };
+    } catch {
+      return {
+        ok: false,
+        error:
+          "Couldn't reach the server — check your connection and try again.",
+      };
     }
   }
 
@@ -395,6 +434,7 @@ export function MaterialLibraryPanel({
           schemaStatus={schemaStatus}
           onClose={() => setDetailMaterial(null)}
           onExtract={runExtraction}
+          onGenerate={runGeneration}
         />
       )}
     </section>

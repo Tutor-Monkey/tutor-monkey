@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   describeExtractionState,
+  describeGenerationState,
   describeUnsupportedMaterialFormat,
   extractActionLabel,
+  generateActionLabel,
   isExtractableFile,
   parseExtractionCount,
   shortDate,
@@ -229,5 +231,133 @@ describe("describeExtractionState", () => {
       provenance: null,
     });
     expect(state.kind).toBe("not-extracted");
+  });
+});
+
+describe("describeGenerationState", () => {
+  const readyWithText = {
+    status: "ready" as const,
+    sourceType: "local_upload",
+    provenance: {
+      extraction: { text: "Photosynthesis happens in chloroplasts." },
+    },
+  };
+
+  it("reports processing while a generate job is running", () => {
+    const state = describeGenerationState({
+      ...readyWithText,
+      hasRunningGenerateJob: true,
+    });
+    expect(state.kind).toBe("processing");
+    if (state.kind !== "processing") return;
+    expect(state.message).toMatch(/running/i);
+  });
+
+  it("is unavailable before extraction succeeds", () => {
+    const uploaded = describeGenerationState({
+      status: "uploaded",
+      sourceType: "local_upload",
+    });
+    expect(uploaded.kind).toBe("unavailable");
+    if (uploaded.kind !== "unavailable") return;
+    expect(uploaded.message).toMatch(/extract text first/i);
+
+    const failed = describeGenerationState({ status: "failed" });
+    expect(failed.kind).toBe("unavailable");
+    if (failed.kind !== "unavailable") return;
+    expect(failed.message).toMatch(/failed to extract/i);
+
+    const processing = describeGenerationState({ status: "processing" });
+    expect(processing.kind).toBe("unavailable");
+  });
+
+  it("is unavailable for non-local uploads", () => {
+    const state = describeGenerationState({
+      status: "ready",
+      sourceType: "google_drive",
+      provenance: { extraction: { text: "text" } },
+    });
+    expect(state.kind).toBe("unavailable");
+    if (state.kind !== "unavailable") return;
+    expect(state.message).toMatch(/locally uploaded/i);
+  });
+
+  it("only claims generated when a worksheet is actually persisted", () => {
+    const state = describeGenerationState({
+      status: "ready",
+      sourceType: "local_upload",
+      provenance: {
+        extraction: { text: "text" },
+        worksheet: {
+          worksheet: {
+            title: "Review",
+            questions: [
+              {
+                id: "q1",
+                type: "short_answer",
+                prompt: "P?",
+                answer: "A",
+              },
+            ],
+          },
+          provider: "opencode",
+          model: "opencode-worksheet-v1",
+          generated_at: "2026-08-02T12:00:00.000Z",
+          truncated_source: true,
+        },
+      },
+    });
+    expect(state.kind).toBe("generated");
+    if (state.kind !== "generated") return;
+    expect(state.worksheet.title).toBe("Review");
+    expect(state.generatedAt).toBe("2026-08-02T12:00:00.000Z");
+    expect(state.model).toBe("opencode-worksheet-v1");
+    expect(state.truncatedSource).toBe(true);
+  });
+
+  it("shows the recorded generate error verbatim", () => {
+    const state = describeGenerationState({
+      status: "ready",
+      sourceType: "local_upload",
+      provenance: {
+        extraction: { text: "text" },
+        worksheet: {
+          last_error: {
+            stage: "generate",
+            message:
+              "Worksheet generation isn't configured yet — the developer needs to set OPENCODE_BASE_URL in the server environment.",
+            at: "2026-08-02T12:00:00.000Z",
+          },
+        },
+      },
+    });
+    expect(state.kind).toBe("failed");
+    if (state.kind !== "failed") return;
+    expect(state.message).toContain("OPENCODE_BASE_URL");
+  });
+
+  it("is unavailable when no extracted text is saved", () => {
+    const state = describeGenerationState({
+      status: "ready",
+      sourceType: "local_upload",
+      provenance: { extraction: { char_count: 0 } },
+    });
+    expect(state.kind).toBe("unavailable");
+    if (state.kind !== "unavailable") return;
+    expect(state.message).toMatch(/no extracted text/i);
+  });
+
+  it("is ready once the text exists", () => {
+    const state = describeGenerationState(readyWithText);
+    expect(state.kind).toBe("ready");
+    if (state.kind !== "ready") return;
+    expect(state.message).toMatch(/ready/i);
+  });
+});
+
+describe("generateActionLabel", () => {
+  it("labels first generation and regeneration honestly", () => {
+    expect(generateActionLabel(false)).toBe("Generate worksheet");
+    expect(generateActionLabel(true)).toBe("Regenerate worksheet");
   });
 });

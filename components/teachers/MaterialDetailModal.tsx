@@ -11,6 +11,7 @@ import {
   Info,
   Loader2,
   ScanText,
+  Sparkles,
   X,
 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -18,11 +19,14 @@ import type { TeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
 import { formatBytes } from "@/lib/teachers/materials";
 import {
   describeExtractionState,
+  describeGenerationState,
   extractActionLabel,
+  generateActionLabel,
   shortDate,
   type ExtractionProvenance,
   type MaterialStatus,
 } from "@/lib/teachers/materialDetail";
+import { validateWorksheet, type Worksheet } from "@/lib/teachers/worksheet";
 import { MaterialStatusBadge } from "@/components/teachers/MaterialStatusBadge";
 
 /**
@@ -67,6 +71,14 @@ type ProcessingJobRow = {
   created_at: string;
 };
 
+export type GenerateWorksheetOutcome = {
+  ok: boolean;
+  error?: string;
+  worksheet?: Worksheet;
+  model?: string | null;
+  truncatedSource?: boolean;
+};
+
 type MaterialDetailModalProps = {
   material: MaterialSummary;
   schemaStatus: TeachersSchemaStatus;
@@ -74,6 +86,7 @@ type MaterialDetailModalProps = {
   onExtract: (
     materialId: string,
   ) => Promise<{ ok: boolean; error?: string }>;
+  onGenerate: (materialId: string) => Promise<GenerateWorksheetOutcome>;
 };
 
 function workspaceTitleOf(
@@ -108,12 +121,23 @@ export function MaterialDetailModal({
   schemaStatus,
   onClose,
   onExtract,
+  onGenerate,
 }: MaterialDetailModalProps) {
   const [detail, setDetail] = useState<MaterialDetailRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  // The worksheet returned by the most recent successful generation, shown
+  // immediately; provenance (refetched after success) is the durable copy.
+  const [generationResult, setGenerationResult] = useState<{
+    worksheet: Worksheet;
+    generatedAt: string;
+    model: string | null;
+    truncatedSource: boolean;
+  } | null>(null);
 
   const isReady = schemaStatus === "ready";
 
@@ -185,7 +209,7 @@ export function MaterialDetailModal({
   }, [onClose]);
 
   async function handleExtract() {
-    if (busy || !detail) return;
+    if (busy || generating || !detail) return;
     setBusy(true);
     setExtractError(null);
     const outcome = await onExtract(detail.id);
@@ -201,6 +225,33 @@ export function MaterialDetailModal({
     setBusy(false);
   }
 
+  async function handleGenerate() {
+    if (generating || busy || !detail) return;
+    setGenerating(true);
+    setGenerateError(null);
+    const outcome = await onGenerate(detail.id);
+    // The route only returns a worksheet after validating AND persisting
+    // it; keep the promise by re-validating here before showing anything.
+    const validation = outcome.worksheet
+      ? validateWorksheet(outcome.worksheet)
+      : null;
+    if (outcome.ok && validation?.ok) {
+      setGenerationResult({
+        worksheet: validation.worksheet,
+        generatedAt: new Date().toISOString(),
+        model: outcome.model ?? null,
+        truncatedSource: outcome.truncatedSource === true,
+      });
+      // Refetch so the provenance copy + the fresh generate job appear.
+      await loadDetail(detail.id);
+    } else {
+      setGenerateError(
+        outcome.error ?? "Worksheet generation failed — please try again.",
+      );
+    }
+    setGenerating(false);
+  }
+
   const extractionState = detail
     ? describeExtractionState({
         status: detail.status,
@@ -211,6 +262,32 @@ export function MaterialDetailModal({
     : null;
 
   const jobs = detail?.processing_jobs ?? [];
+  const hasRunningGenerateJob = jobs.some(
+    (job) => job.stage === "generate" && job.status === "running",
+  );
+  const generationState = detail
+    ? describeGenerationState({
+        status: detail.status,
+        sourceType: detail.source_type,
+        provenance: detail.provenance,
+        hasRunningGenerateJob,
+      })
+    : null;
+  const shownWorksheet =
+    generationResult?.worksheet ??
+    (generationState?.kind === "generated" ? generationState.worksheet : null);
+  const worksheetMeta =
+    generationResult ??
+    (generationState?.kind === "generated"
+      ? {
+          worksheet: generationState.worksheet,
+          generatedAt: generationState.generatedAt ?? "",
+          model: generationState.model,
+          truncatedSource: generationState.truncatedSource,
+        }
+      : null);
+  const canGenerate =
+    generationState?.kind === "ready" || generationState?.kind === "generated";
 
   return (
     <div
@@ -423,6 +500,71 @@ export function MaterialDetailModal({
                 )}
               </section>
 
+              {/* Worksheet generation */}
+              <section aria-label="Generated worksheet">
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900">
+                  <Sparkles
+                    className="h-4 w-4 text-gray-500"
+                    aria-hidden="true"
+                  />
+                  Generated worksheet
+                </h3>
+
+                {generationState?.kind === "unavailable" && (
+                  <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <AlertTriangle
+                      className="mt-0.5 h-5 w-5 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <p className="font-light">{generationState.message}</p>
+                  </div>
+                )}
+
+                {generationState?.kind === "processing" && (
+                  <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                    <Loader2
+                      className="mt-0.5 h-5 w-5 shrink-0 animate-spin"
+                      aria-hidden="true"
+                    />
+                    <p className="font-light">{generationState.message}</p>
+                  </div>
+                )}
+
+                {generationState?.kind === "failed" && (
+                  <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    <AlertTriangle
+                      className="mt-0.5 h-5 w-5 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <p className="font-light">{generationState.message}</p>
+                  </div>
+                )}
+
+                {generationState?.kind === "ready" && !shownWorksheet && (
+                  <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/60 px-6 py-6 text-center">
+                    <Sparkles
+                      className="mx-auto mb-3 h-8 w-8 text-gray-400"
+                      aria-hidden="true"
+                    />
+                    <p className="text-sm font-medium text-gray-900">
+                      Worksheet not generated yet
+                    </p>
+                    <p className="mx-auto max-w-md text-sm text-gray-500 font-light">
+                      {generationState.message}
+                    </p>
+                  </div>
+                )}
+
+                {shownWorksheet && worksheetMeta && (
+                  <WorksheetPreview
+                    worksheet={shownWorksheet}
+                    generatedAt={worksheetMeta.generatedAt || null}
+                    truncatedSource={worksheetMeta.truncatedSource}
+                    model={worksheetMeta.model}
+                  />
+                )}
+              </section>
+
               {/* Recent processing runs */}
               {jobs.length > 0 && (
                 <section aria-label="Processing history">
@@ -475,13 +617,19 @@ export function MaterialDetailModal({
         <div className="flex flex-col-reverse items-stretch gap-2 border-t border-gray-100 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="flex items-start gap-1.5 text-xs text-gray-500 font-light">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true" />
-            Text is read on the server through your session — never sent to a
-            third-party service.
+            Text is read on the server through your session. Worksheet generation
+            runs on the server through the configured OpenCode-compatible
+            provider and never exposes its key to the browser.
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {extractError && (
               <p role="alert" className="max-w-[240px] text-xs text-red-600 font-light">
                 {extractError}
+              </p>
+            )}
+            {generateError && (
+              <p role="alert" className="max-w-[240px] text-xs text-red-600 font-light">
+                {generateError}
               </p>
             )}
             <button
@@ -504,9 +652,122 @@ export function MaterialDetailModal({
               )}
               {busy ? "Extracting…" : extractActionLabel(material.status)}
             </button>
+            {canGenerate && (
+              <button
+                type="button"
+                onClick={() => void handleGenerate()}
+                disabled={!isReady || generating || busy || !detail || loading}
+                className="shrink-0 inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-xs font-medium text-white shadow-sm transition-all duration-300 hover:bg-gray-800 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {generating ? (
+                  <Loader2
+                    className="h-3.5 w-3.5 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+                {generating
+                  ? "Generating…"
+                  : generateActionLabel(shownWorksheet != null)}
+              </button>
+            )}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function WorksheetPreview({
+  worksheet,
+  generatedAt,
+  truncatedSource,
+  model,
+}: {
+  worksheet: Worksheet;
+  generatedAt: string | null;
+  truncatedSource: boolean;
+  model: string | null;
+}) {
+  return (
+    <div className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h4 className="text-base font-semibold text-gray-900">
+            {worksheet.title}
+          </h4>
+          {worksheet.instructions && (
+            <p className="mt-1 text-sm text-gray-600 font-light">
+              {worksheet.instructions}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap justify-end gap-2 text-[11px] text-gray-500">
+          <span className="rounded-full bg-white px-2.5 py-1">
+            {worksheet.questions.length} questions
+          </span>
+          {model && (
+            <span className="rounded-full bg-white px-2.5 py-1">{model}</span>
+          )}
+          {truncatedSource && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">
+              Source was capped
+            </span>
+          )}
+        </div>
+      </div>
+
+      <ol className="space-y-3">
+        {worksheet.questions.map((question, index) => (
+          <li
+            key={question.id}
+            className="rounded-lg border border-gray-200 bg-white p-4"
+          >
+            <p className="text-sm font-medium text-gray-900">
+              {index + 1}. {question.prompt}
+            </p>
+            {question.choices && (
+              <ul className="mt-2 space-y-1 pl-4 text-sm text-gray-700">
+                {question.choices.map((choice) => (
+                  <li key={choice} className="list-disc font-light">
+                    {choice}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <details className="mt-3 text-xs text-gray-500">
+              <summary className="cursor-pointer font-medium text-gray-600">
+                Answer and explanation
+              </summary>
+              <p className="mt-2 font-light">
+                <span className="font-medium">Answer:</span> {question.answer}
+              </p>
+              {question.explanation && (
+                <p className="mt-1 font-light">{question.explanation}</p>
+              )}
+            </details>
+          </li>
+        ))}
+      </ol>
+
+      {worksheet.answer_key && (
+        <details className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
+          <summary className="cursor-pointer font-medium text-gray-700">
+            Teacher answer-key notes
+          </summary>
+          <p className="mt-2 whitespace-pre-wrap text-gray-600 font-light">
+            {worksheet.answer_key}
+          </p>
+        </details>
+      )}
+
+      {generatedAt && (
+        <p className="text-xs text-gray-400 font-light">
+          Generated {shortDate(generatedAt) || "recently"} with server-side
+          OpenCode-compatible processing.
+        </p>
+      )}
     </div>
   );
 }

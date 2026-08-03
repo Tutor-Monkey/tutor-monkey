@@ -13,8 +13,26 @@
  */
 
 import { EXTRACTABLE_EXTENSIONS, extensionOf } from "./materials";
+import type { Worksheet } from "./worksheet";
 
 export type MaterialStatus = "uploaded" | "processing" | "ready" | "failed";
+
+/**
+ * The provenance.worksheet block written by the generate route. Mirrors the
+ * server-side persistence shape (app/api/teachers/materials/[materialId]/
+ * generate/route.ts) — keep the two in sync.
+ */
+export type WorksheetProvenanceBlock = {
+  worksheet?: Worksheet;
+  provider?: string;
+  model?: string;
+  generated_at?: string;
+  job_id?: string;
+  source_char_count?: number | string;
+  truncated_source?: boolean;
+  last_error?: { stage?: string; message?: string; at?: string } | null;
+  [key: string]: unknown;
+};
 
 export type ExtractionProvenance = {
   extraction?: {
@@ -29,6 +47,7 @@ export type ExtractionProvenance = {
     job_id?: string;
   } | null;
   last_error?: { stage?: string; message?: string; at?: string } | null;
+  worksheet?: WorksheetProvenanceBlock | null;
   // provenance is a free-form JSONB object (e.g. uploaded_by / upload_batch
   // from intake); typed keys above are just the ones this slice reads.
   [key: string]: unknown;
@@ -213,4 +232,130 @@ export function describeExtractionState(
     message:
       "This file is uploaded but hasn't been read yet. Click “Extract text” to read it on the server — no third-party service is used.",
   };
+}
+
+/**
+ * What the worksheet-generation section of the material review view should
+ * show, decided purely from row data. One state per situation, with the
+ * message the UI should render verbatim — generation is only ever presented
+ * as done when provenance.worksheet.worksheet actually exists (which the
+ * route only writes after validation + persistence).
+ */
+export type GenerationState =
+  | { kind: "unavailable"; message: string }
+  | { kind: "ready"; message: string }
+  | { kind: "processing"; message: string }
+  | { kind: "failed"; message: string }
+  | {
+      kind: "generated";
+      worksheet: Worksheet;
+      generatedAt: string | null;
+      truncatedSource: boolean;
+      model: string | null;
+    };
+
+type DescribeGenerationInput = {
+  status: MaterialStatus;
+  sourceType?: string | null;
+  provenance?: ExtractionProvenance | null;
+  /** True when a stage="generate" processing job is currently running. */
+  hasRunningGenerateJob?: boolean;
+};
+
+/**
+ * Decide what the worksheet section shows. Precedence:
+ *   1. a running generate job  – generation is in flight (even if a previous
+ *                                worksheet exists, don't present it as fresh).
+ *   2. not "ready"             – extraction must succeed first; say so per
+ *                                status instead of a generic "try again".
+ *   3. non-local upload        – not supported yet.
+ *   4. saved worksheet         – generated; only here is success claimed.
+ *   5. recorded generate error – the route's message verbatim.
+ *   6. no extracted text       – generation genuinely can't run yet.
+ *   7. otherwise               – ready to generate.
+ */
+export function describeGenerationState(
+  input: DescribeGenerationInput,
+): GenerationState {
+  const { status, sourceType, provenance, hasRunningGenerateJob } = input;
+  const block = provenance?.worksheet ?? null;
+  const lastError = block?.last_error ?? null;
+
+  if (hasRunningGenerateJob) {
+    return {
+      kind: "processing",
+      message:
+        "Worksheet generation is running — give it a moment, then reopen this material.",
+    };
+  }
+
+  if (status !== "ready") {
+    if (status === "failed") {
+      return {
+        kind: "unavailable",
+        message:
+          "This material failed to extract — fix extraction before generating a worksheet.",
+      };
+    }
+    if (status === "processing") {
+      return {
+        kind: "unavailable",
+        message:
+          "Extraction is still running — worksheet generation becomes available once the text is ready.",
+      };
+    }
+    return {
+      kind: "unavailable",
+      message:
+        "Extract text first — worksheet generation needs the material's extracted text.",
+    };
+  }
+
+  if (sourceType && sourceType !== "local_upload") {
+    return {
+      kind: "unavailable",
+      message:
+        "Only locally uploaded materials can generate worksheets yet.",
+    };
+  }
+
+  if (block?.worksheet) {
+    return {
+      kind: "generated",
+      worksheet: block.worksheet,
+      generatedAt:
+        typeof block.generated_at === "string" && block.generated_at.trim() !== ""
+          ? block.generated_at
+          : null,
+      truncatedSource: block.truncated_source === true,
+      model:
+        typeof block.model === "string" && block.model.trim() !== ""
+          ? block.model
+          : null,
+    };
+  }
+
+  if (lastError?.message?.trim()) {
+    return { kind: "failed", message: lastError.message };
+  }
+
+  const text = provenance?.extraction?.text ?? "";
+  if (text.trim() === "") {
+    return {
+      kind: "unavailable",
+      message:
+        "No extracted text is saved for this material — run Extract first.",
+    };
+  }
+
+  return {
+    kind: "ready",
+    message:
+      "This material's text is ready — generate a worksheet from it on the server.",
+  };
+}
+
+/** Label for the per-material generate action. */
+export function generateActionLabel(hasWorksheet: boolean): string {
+  return hasWorksheet ? "Regenerate worksheet" : "Generate worksheet";
 }
