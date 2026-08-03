@@ -79,6 +79,15 @@ async function getMetadata(token: string, pick: GoogleDrivePick): Promise<DriveM
   return driveRequest<DriveMetadata>(token, `${DRIVE_API}/files/${encodeURIComponent(pick.id)}?fields=${fields}`);
 }
 
+function driveStorageMime(metadata: DriveMetadata): string {
+  return EXPORT_MIME[metadata.mimeType] ?? metadata.mimeType ?? "application/octet-stream";
+}
+
+async function getDriveMetadataById(token: string, id: string): Promise<DriveMetadata> {
+  const fields = encodeURIComponent("id,name,mimeType,size,parents");
+  return driveRequest<DriveMetadata>(token, `${DRIVE_API}/files/${encodeURIComponent(id)}?fields=${fields}`);
+}
+
 async function downloadDriveFile(token: string, metadata: DriveMetadata): Promise<File> {
   const exportMime = EXPORT_MIME[metadata.mimeType];
   const endpoint = exportMime
@@ -90,6 +99,40 @@ async function downloadDriveFile(token: string, metadata: DriveMetadata): Promis
   return new File([blob], safeName(metadata.name), {
     type: exportMime ?? metadata.mimeType ?? blob.type ?? "application/octet-stream",
   });
+}
+
+/** Download one explicitly selected/used Drive file into private Storage. */
+export async function hydrateDriveMaterial(options: {
+  token: string;
+  materialId: string;
+  workspaceId: string;
+  supabase: SupabaseClient;
+}): Promise<boolean> {
+  const row = await options.supabase
+    .from("materials")
+    .select("id, original_filename, storage_path, provenance")
+    .eq("id", options.materialId)
+    .eq("workspace_id", options.workspaceId)
+    .maybeSingle();
+  if (row.error || !row.data) return false;
+  const provenance = (row.data.provenance ?? {}) as { drive_file_id?: unknown };
+  if (typeof provenance.drive_file_id !== "string") return false;
+  if (row.data.storage_path) {
+    const extraction = await fetch(`/api/teachers/materials/${row.data.id}/extract`, { method: "POST" });
+    return extraction.ok || extraction.status === 409;
+  }
+  const metadata = await getDriveMetadataById(options.token, provenance.drive_file_id);
+  const file = await downloadDriveFile(options.token, metadata);
+  const path = buildMaterialObjectPath(options.workspaceId, file.name);
+  const upload = await options.supabase.storage.from(TEACHERS_MATERIALS_BUCKET).upload(path, file, { contentType: resolveMaterialMimeType(file), upsert: false, cacheControl: "3600" });
+  if (upload.error) return false;
+  const update = await options.supabase.from("materials").update({ storage_path: path, mime_type: resolveMaterialMimeType(file), byte_size: file.size }).eq("id", row.data.id).eq("workspace_id", options.workspaceId);
+  if (update.error) {
+    await options.supabase.storage.from(TEACHERS_MATERIALS_BUCKET).remove([path]);
+    return false;
+  }
+  const extraction = await fetch(`/api/teachers/materials/${row.data.id}/extract`, { method: "POST" });
+  return extraction.ok || extraction.status === 409;
 }
 
 /**
@@ -123,29 +166,22 @@ export async function importSelectedDrivePicks(options: {
     if (existingIds.has(metadata.id)) {
       const existingRow = existingRows.find((row) => (row.provenance as { drive_file_id?: unknown } | null)?.drive_file_id === metadata.id);
       const existingProvenance = (existingRow?.provenance ?? {}) as Record<string, unknown>;
-      if (existingRow && metadata.folderPath && metadata.folderPath.length > 0 && !Array.isArray(existingProvenance.folder_path)) {
+      if (existingRow && metadata.folderPath && metadata.folderPath.length > 0 && JSON.stringify(existingProvenance.folder_path ?? []) !== JSON.stringify(metadata.folderPath)) {
         await options.supabase.from("materials").update({ provenance: { ...existingProvenance, folder_path: metadata.folderPath } }).eq("id", existingRow.id).eq("workspace_id", options.workspaceId);
       }
       outcome.skipped.push(metadata.name);
       continue;
     }
     try {
-      const file = await downloadDriveFile(options.token, metadata);
-      const path = buildMaterialObjectPath(options.workspaceId, file.name);
-      const mimeType = resolveMaterialMimeType(file);
-      const upload = await options.supabase.storage.from(TEACHERS_MATERIALS_BUCKET).upload(path, file, {
-        contentType: mimeType,
-        upsert: false,
-        cacheControl: "3600",
-      });
-      if (upload.error) throw upload.error;
+      const filename = safeName(metadata.name);
+      const mimeType = driveStorageMime(metadata);
       const inserted = await options.supabase.from("materials").insert({
         workspace_id: options.workspaceId,
         source_type: "google_drive",
-        original_filename: file.name,
-        storage_path: path,
+        original_filename: filename,
+        storage_path: null,
         mime_type: mimeType,
-        byte_size: file.size,
+        byte_size: metadata.size ? Number(metadata.size) : null,
         status: "uploaded",
         provenance: {
           uploaded_by: options.userId,
@@ -155,15 +191,11 @@ export async function importSelectedDrivePicks(options: {
           drive_parents: metadata.parents ?? [],
           folder_path: metadata.folderPath ?? [],
           imported_explicitly: true,
+          lazy_content: true,
         },
       }).select("id").single();
-      if (inserted.error || !inserted.data) {
-        await options.supabase.storage.from(TEACHERS_MATERIALS_BUCKET).remove([path]);
-        throw inserted.error ?? new Error("Drive material row was not created");
-      }
-      const extraction = await fetch(`/api/teachers/materials/${inserted.data.id}/extract`, { method: "POST" });
-      if (!extraction.ok) throw new Error("Automatic extraction failed");
-      outcome.imported.push(file.name);
+      if (inserted.error || !inserted.data) throw inserted.error ?? new Error("Drive material row was not created");
+      outcome.imported.push(filename);
       existingIds.add(metadata.id);
     } catch {
       outcome.failed.push(metadata.name);

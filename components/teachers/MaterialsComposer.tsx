@@ -21,12 +21,14 @@ import {
   requestWorkspaceGeneration,
   type GeneratedComposerMaterial,
 } from "@/lib/teachers/workspaceComposerClient";
+import { hydrateDriveMaterial } from "@/lib/teachers/googleDriveImportClient";
 import {
   loadGooglePicker,
   openGoogleDrivePicker,
   readGoogleProviderToken,
 } from "@/lib/teachers/googlePickerClient";
 import { readGooglePickerPublicConfig } from "@/lib/teachers/googlePicker";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { uploadWorksheetToDrive } from "@/lib/teachers/driveSaveClient";
 
 type MentionPart = { kind: "mention"; doc: ComposerSourceDoc };
@@ -162,6 +164,7 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
     () => parts.filter((part): part is MentionPart => part.kind === "mention").map((part) => part.doc),
     [parts],
   );
+  const canUseSource = (doc: ComposerSourceDoc) => isReadySourceDoc(doc) || doc.sourceType === "google_drive";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -252,14 +255,26 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
     setGenerating(false);
     if (!result.ok) return;
     const explicitIds = new Set(selectedDocs.map((doc) => doc.id));
-    const suggested = result.candidates.filter((doc) => !explicitIds.has(doc.id) && isReadySourceDoc(doc)).slice(0, 4);
+    const suggested = result.candidates.filter((doc) => !explicitIds.has(doc.id) && canUseSource(doc)).slice(0, 4);
     setConfirmation({ prompt, explicit: selectedDocs, suggested });
   }
 
   async function confirmGeneration() {
     if (!confirmation || confirming) return;
     setConfirming(true);
-    const materialIds = Array.from(new Set([...confirmation.explicit, ...confirmation.suggested].filter(isReadySourceDoc).map((doc) => doc.id)));
+    const candidates = [...confirmation.explicit, ...confirmation.suggested].filter(canUseSource);
+    const driveToken = await readGoogleProviderToken();
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) { setConfirming(false); return; }
+    for (const doc of candidates) {
+      if (!isReadySourceDoc(doc) && doc.sourceType === "google_drive") {
+        if (!driveToken || !(await hydrateDriveMaterial({ token: driveToken, materialId: doc.id, workspaceId: currentWorkspaceId, supabase }))) {
+          setConfirming(false);
+          return;
+        }
+      }
+    }
+    const materialIds = Array.from(new Set(candidates.map((doc) => doc.id)));
     const result = await requestWorkspaceGeneration(currentWorkspaceId, {
       prompt: confirmation.prompt,
       materialIds,
@@ -371,7 +386,7 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
               {confirmation.suggested.length > 0 ? confirmation.suggested.map((doc) => <div key={doc.id} className="flex items-center gap-2 py-1 text-sm text-gray-800"><FileText className="h-4 w-4 text-gray-400" />{doc.filename}</div>) : <p className="text-sm text-gray-400">No related documents found</p>}
             </div>
           </div>
-          <button type="button" onClick={() => void confirmGeneration()} disabled={confirming || [...confirmation.explicit, ...confirmation.suggested].filter(isReadySourceDoc).length === 0} className="mt-5 inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400">{confirming && <Loader2 className="h-4 w-4 animate-spin" />}Generate material</button>
+          <button type="button" onClick={() => void confirmGeneration()} disabled={confirming || [...confirmation.explicit, ...confirmation.suggested].filter(canUseSource).length === 0} className="mt-5 inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400">{confirming && <Loader2 className="h-4 w-4 animate-spin" />}Generate material</button>
         </div>
       )}
       {generated && (

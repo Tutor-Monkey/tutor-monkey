@@ -98,11 +98,11 @@ export async function POST(
     return json({ error: "Material not found." }, 404);
   }
 
-  if (material.source_type !== "local_upload") {
+  if (material.source_type !== "local_upload" && material.source_type !== "google_drive") {
     return json(
       {
         error:
-          "Only locally uploaded materials can be extracted — Google Drive imports aren't supported yet.",
+          "This material type cannot be extracted by TutorMonkey.",
       },
       400,
     );
