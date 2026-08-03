@@ -55,6 +55,7 @@ declare global {
       interface PickerResponse {
         action: string;
         docs?: unknown;
+        error?: string;
       }
       interface PickerBuilderLike {
         addView(view: unknown): PickerBuilderLike;
@@ -64,6 +65,7 @@ declare global {
         setCallback(
           callback: (response: PickerResponse) => void,
         ): PickerBuilderLike;
+        setOrigin(origin: string): PickerBuilderLike;
         build(): { setVisible(visible: boolean): void };
       }
       interface DocsViewLike {
@@ -200,10 +202,13 @@ export function openGoogleDrivePicker(options: GoogleDrivePickerOptions): void {
         options.onCanceled?.();
       } else if (response.action === google.picker.Action.ERROR) {
         options.onError?.(
-          "Google Picker hit an error — please close it and try again.",
+          response.error
+            ? `Google Picker error: ${response.error}`
+            : "Google Picker hit an error — check the API key restrictions, enabled APIs, and Drive authorization, then try again.",
         );
       }
     })
+    .setOrigin(window.location.origin)
     .build();
 
   picker.setVisible(true);
