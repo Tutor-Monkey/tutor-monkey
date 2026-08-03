@@ -14,6 +14,7 @@ import {
   buildWorksheetMarkdown,
   isReadySourceDoc,
   type ComposerSourceDoc,
+  SUGGESTION_LIMIT_UI,
   SUGGESTION_LIMIT_MAX,
 } from "@/lib/teachers/materialsComposer";
 import { MAX_TEACHER_PROMPT_CHARS } from "@/lib/teachers/generateRequest";
@@ -172,7 +173,7 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetchWorkspaceSuggestions(currentWorkspaceId, "", SUGGESTION_LIMIT_MAX, controller.signal).then((result) => {
+    void fetchWorkspaceSuggestions(currentWorkspaceId, "", SUGGESTION_LIMIT_UI, controller.signal).then((result) => {
       if (!controller.signal.aborted && result.ok) {
         setDocs((current) => [...current, ...result.candidates.filter((doc) => !current.some((item) => item.id === doc.id))]);
       }
@@ -188,7 +189,7 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
     const controller = new AbortController();
     setMenuOpen(true);
     setLoadingSuggestions(true);
-    void fetchWorkspaceSuggestions(currentWorkspaceId, mention.query, SUGGESTION_LIMIT_MAX, controller.signal).then((result) => {
+    void fetchWorkspaceSuggestions(currentWorkspaceId, mention.query, SUGGESTION_LIMIT_UI, controller.signal).then((result) => {
       if (controller.signal.aborted) return;
       setLoadingSuggestions(false);
       if (result.ok) {

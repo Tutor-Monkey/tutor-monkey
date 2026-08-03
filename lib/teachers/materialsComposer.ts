@@ -128,7 +128,8 @@ export function replaceMentionRange(
 
 /** Default / maximum number of candidates the suggestion UI may show. */
 export const SUGGESTION_LIMIT_DEFAULT = 10;
-export const SUGGESTION_LIMIT_MAX = 20;
+export const SUGGESTION_LIMIT_UI = 20;
+export const SUGGESTION_LIMIT_MAX = 100;
 
 /**
  * Bound a raw `limit` value (URL param) into [1, SUGGESTION_LIMIT_MAX].
