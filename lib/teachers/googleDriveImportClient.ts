@@ -91,16 +91,22 @@ export async function importSelectedDrivePicks(options: {
   const unique = selected.filter((file, index, all) => all.findIndex((other) => other.id === file.id) === index);
   const existing = await options.supabase
     .from("materials")
-    .select("provenance")
+    .select("id, provenance")
     .eq("workspace_id", options.workspaceId)
     .limit(500);
+  const existingRows = existing.data ?? [];
   const existingIds = new Set(
-    (existing.data ?? []).map((row) => (row.provenance as { drive_file_id?: unknown } | null)?.drive_file_id).filter((id): id is string => typeof id === "string"),
+    existingRows.map((row) => (row.provenance as { drive_file_id?: unknown } | null)?.drive_file_id).filter((id): id is string => typeof id === "string"),
   );
   const outcome: DriveImportOutcome = { imported: [], skipped: [], failed: [] };
 
   for (const metadata of unique) {
     if (existingIds.has(metadata.id)) {
+      const existingRow = existingRows.find((row) => (row.provenance as { drive_file_id?: unknown } | null)?.drive_file_id === metadata.id);
+      const existingProvenance = (existingRow?.provenance ?? {}) as Record<string, unknown>;
+      if (existingRow && metadata.folderPath && metadata.folderPath.length > 0 && !Array.isArray(existingProvenance.folder_path)) {
+        await options.supabase.from("materials").update({ provenance: { ...existingProvenance, folder_path: metadata.folderPath } }).eq("id", existingRow.id).eq("workspace_id", options.workspaceId);
+      }
       outcome.skipped.push(metadata.name);
       continue;
     }
