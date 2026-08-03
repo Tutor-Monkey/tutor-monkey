@@ -49,6 +49,8 @@ type GoogleDriveImportButtonProps = {
   disabled?: boolean;
   /** Button label override for folder-vs-file actions. */
   label?: string;
+  /** Render as an icon-only toolbar action. */
+  compact?: boolean;
   /** Typed callback with the picked file/folder ids + metadata. */
   onPicked: (picks: GoogleDrivePick[]) => void;
   /** Lift the gate up so the parent can render the setup banner. */
@@ -58,6 +60,7 @@ type GoogleDriveImportButtonProps = {
 export function GoogleDriveImportButton({
   mode = "files",
   label = "Import from Drive",
+  compact = false,
   disabled = false,
   onPicked,
   onGateChange,
@@ -145,15 +148,16 @@ export function GoogleDriveImportButton({
         type="button"
         onClick={() => void handleClick()}
         disabled={disabled || gate === null || !available || opening}
+        aria-label={label}
         title={title}
-        className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-all duration-300 hover:border-gray-400 hover:bg-gray-50 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+        className={compact ? "rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white disabled:cursor-not-allowed disabled:opacity-40" : "inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-all duration-300 hover:border-gray-400 hover:bg-gray-50 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"}
       >
         {opening ? (
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
         ) : (
           <Cloud className="h-4 w-4" aria-hidden="true" />
         )}
-        {label}
+        {!compact && label}
       </button>
       {pickerError && (
         <p

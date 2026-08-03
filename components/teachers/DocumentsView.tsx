@@ -17,7 +17,6 @@ import {
   ChevronDown,
   ChevronRight,
   FilePlus2,
-  FolderPlus as FolderPlusIcon,
   MoreHorizontal,
   PanelLeftClose,
 } from "lucide-react";
@@ -281,16 +280,12 @@ export function DocumentsView({
           </button>
           <span className="min-w-0 flex-1 truncate text-[17px] font-semibold text-[#f4f4f5]">{currentWorkspace?.title ?? "workspace"}</span>
           <button type="button" onClick={() => setImportOpen(true)} disabled={!isReady || !currentWorkspace} aria-label="New document" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white disabled:opacity-40"><FilePlus2 className="h-5 w-5" /></button>
-          <button type="button" onClick={() => setImportOpen(true)} disabled={!isReady || !currentWorkspace} aria-label="New folder" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white disabled:opacity-40"><FolderPlusIcon className="h-5 w-5" /></button>
+          <GoogleDriveImportButton mode="folders" compact label="Import folder from Google Drive" onPicked={handleDrivePicked} onGateChange={setDriveGate} disabled={!isReady || !currentWorkspace} />
           <button type="button" onClick={() => void loadDocuments()} disabled={loading} aria-label="Refresh explorer" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white disabled:opacity-40"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button>
           <button type="button" onClick={() => setFolderSegments([])} aria-label="Collapse all folders" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white"><PanelLeftClose className="h-5 w-5" /></button>
         </div>
       </div>
 
-      <div className="mb-3 flex items-center gap-2 border-b border-[#30323d] pb-2 text-xs text-[#858896]">
-        <button type="button" onClick={() => setImportOpen((open) => !open)} disabled={!isReady || !currentWorkspace} className="rounded px-2 py-1 hover:bg-[#30323d] hover:text-white">{importOpen ? "Back to files" : "Import files"}</button>
-        <GoogleDriveImportButton mode="folders" label="Import folder" onPicked={handleDrivePicked} onGateChange={setDriveGate} disabled={!isReady || !currentWorkspace} />
-      </div>
 
       {driveGate && !driveGate.available && (
         <div className="mb-6 flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-sm text-gray-600">
@@ -430,7 +425,7 @@ export function DocumentsView({
                         aria-hidden="true"
                       />
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-gray-900">
+                        <span className="block truncate text-[15px] text-[#e4e4e7]">
                           {folder.name}
                         </span>
                       </span>
@@ -502,7 +497,7 @@ export function DocumentsView({
           )}
 
           {entries.length > 0 && (
-            <div className="flex items-center justify-between gap-3">
+            <div className="hidden">
               <p className="text-xs text-gray-500 font-light">
                 {entries.length} document{entries.length === 1 ? "" : "s"} in this
                 workspace · parsed automatically on upload
@@ -525,7 +520,7 @@ export function DocumentsView({
         </div>
       )}
 
-      <p className="mt-4 flex items-start gap-2 text-xs text-gray-500 font-light">
+      <p className="hidden">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
         Documents are organized by their imported folder paths. Files are parsed automatically in the background.
       </p>
