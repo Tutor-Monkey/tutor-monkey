@@ -27,6 +27,8 @@ import {
 } from "@/lib/teachers/fileBrowser";
 import type { GoogleDriveImportGate } from "@/lib/teachers/googlePicker";
 import type { GoogleDrivePick } from "@/lib/teachers/googlePicker";
+import { readGoogleProviderToken } from "@/lib/teachers/googlePickerClient";
+import { importSelectedDrivePicks, type DriveImportOutcome } from "@/lib/teachers/googleDriveImportClient";
 import { formatBytes } from "@/lib/teachers/materials";
 import {
   parseExtractionCount,
@@ -104,13 +106,35 @@ export function DocumentsView({
   );
   /** Drive import gate lifted from GoogleDriveImportButton (null = checking). */
   const [driveGate, setDriveGate] = useState<GoogleDriveImportGate | null>(null);
-  /** The last Picker selection — ids/metadata only, nothing downloaded yet. */
+  /** The last Picker selection while it is being imported. */
   const [drivePicks, setDrivePicks] = useState<GoogleDrivePick[]>([]);
+  const [driveImporting, setDriveImporting] = useState(false);
+  const [driveImportResult, setDriveImportResult] = useState<DriveImportOutcome | null>(null);
 
   const isReady = schemaStatus === "ready";
 
   function handleDrivePicked(picks: GoogleDrivePick[]) {
+    if (!currentWorkspace || picks.length === 0) return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
     setDrivePicks(picks);
+    setDriveImportResult(null);
+    setDriveImporting(true);
+    void readGoogleProviderToken().then((token) => {
+      if (!token) throw new Error("Google Drive authorization is missing");
+      return importSelectedDrivePicks({
+        token,
+        picks,
+        workspaceId: currentWorkspace.id,
+        userId,
+        supabase,
+      });
+    }).then((result) => {
+      setDriveImportResult(result);
+      void loadDocuments();
+    }).catch(() => {
+      setDriveImportResult({ imported: [], skipped: [], failed: picks.map((pick) => pick.name) });
+    }).finally(() => setDriveImporting(false));
   }
 
   const loadDocuments = useCallback(async () => {
@@ -179,6 +203,8 @@ export function DocumentsView({
     setImportOpen(false);
     setDetailMaterial(null);
     setDrivePicks([]);
+    setDriveImportResult(null);
+    setDriveImporting(false);
   }, [currentWorkspace?.id]);
 
   const entries = useMemo<DocumentFileEntry[]>(
@@ -291,38 +317,18 @@ export function DocumentsView({
 
       {drivePicks.length > 0 && (
         <div className="mb-6 flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 text-sm text-blue-900 animate-fade-in">
-          <CheckCircle2
-            className="mt-0.5 h-4 w-4 shrink-0 text-blue-500"
-            aria-hidden="true"
-          />
+          {driveImporting ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-500" aria-hidden="true" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" aria-hidden="true" />}
           <div className="min-w-0 flex-1">
-            <p className="font-medium">
-              {drivePicks.length === 1
-                ? "1 item selected from Google Drive"
-                : `${drivePicks.length} items selected from Google Drive`}
-            </p>
-            <ul className="mt-1 space-y-0.5">
-              {drivePicks.map((pick) => (
-                <li key={pick.id} className="truncate font-light">
-                  {pick.kind === "folder" ? "📁" : "📄"} {pick.name}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-1.5 font-light text-blue-800/80">
-              Drive import isn&apos;t wired to the server yet — these picks
-              (ids + metadata) are held here so the next step can consume
-              them. Local uploads and automatic one-time parsing are
-              unchanged.
-            </p>
+            <p className="font-medium">{driveImporting ? "Importing from Google Drive…" : "Google Drive import complete"}</p>
+            {driveImportResult ? (
+              <p className="mt-1 font-light text-blue-800/80">
+                {driveImportResult.imported.length > 0 ? `${driveImportResult.imported.length} imported and parsing automatically. ` : ""}
+                {driveImportResult.skipped.length > 0 ? `${driveImportResult.skipped.length} already imported. ` : ""}
+                {driveImportResult.failed.length > 0 ? `${driveImportResult.failed.length} could not be imported.` : ""}
+              </p>
+            ) : <p className="mt-1 font-light text-blue-800/80">The selected files are being downloaded and added to this workspace. Text extraction starts automatically.</p>}
           </div>
-          <button
-            type="button"
-            onClick={() => setDrivePicks([])}
-            aria-label="Dismiss Drive selection"
-            className="shrink-0 rounded-lg p-1 text-blue-400 transition-colors hover:bg-blue-100 hover:text-blue-700"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
+          {!driveImporting && <button type="button" onClick={() => { setDrivePicks([]); setDriveImportResult(null); }} aria-label="Dismiss Drive import status" className="shrink-0 rounded-lg p-1 text-blue-400 transition-colors hover:bg-blue-100 hover:text-blue-700"><X className="h-4 w-4" aria-hidden="true" /></button>}
         </div>
       )}
 
