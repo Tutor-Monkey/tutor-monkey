@@ -7,9 +7,11 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import { ArrowUp, Check, FileText, Loader2, Plus } from "lucide-react";
+import { ArrowUp, Check, Download, FileText, Loader2, Plus } from "lucide-react";
 import {
   findMentionAtCaret,
+  buildWorksheetDriveFileName,
+  buildWorksheetMarkdown,
   isReadySourceDoc,
   type ComposerSourceDoc,
   SUGGESTION_LIMIT_MAX,
@@ -156,6 +158,7 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
   const [generated, setGenerated] = useState<GeneratedComposerMaterial | null>(null);
   const [driveSaving, setDriveSaving] = useState(false);
   const [driveSaved, setDriveSaved] = useState<string | null>(null);
+  const [driveError, setDriveError] = useState<string | null>(null);
 
   const text = useMemo(() => partsText(parts), [parts]);
   const mention = useMemo(() => findMentionAtCaret(text, caret), [text, caret]);
@@ -299,32 +302,56 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
     }
   }
 
+  function downloadGeneratedMaterial() {
+    if (!generated) return;
+    const markdown = buildWorksheetMarkdown(generated.worksheet);
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = buildWorksheetDriveFileName(generated.worksheet);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   async function saveToDrive() {
     if (!generated || driveSaving) return;
     setDriveSaving(true);
     setDriveSaved(null);
+    setDriveError(null);
     try {
       const token = await readGoogleProviderToken();
       const config = readGooglePickerPublicConfig({ apiKey: process.env.NEXT_PUBLIC_GOOGLE_PICKER_API_KEY, cloudProjectNumber: process.env.NEXT_PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER });
-      if (!token || !config) return;
+      if (!token) {
+        setDriveError("Google Drive authorization is unavailable. Sign in again and retry.");
+        return;
+      }
+      if (!config) {
+        setDriveError("Google Drive saving isn't configured for this browser.");
+        return;
+      }
       await loadGooglePicker();
       await new Promise<void>((resolve) => openGoogleDrivePicker({
         token,
         config,
         mode: "folders",
-        onCanceled: resolve,
-        onError: () => resolve(),
+        onCanceled: () => { setDriveError("Save canceled — no Drive folder was selected."); resolve(); },
+        onError: () => { setDriveError("Google Drive couldn't open the folder picker."); resolve(); },
         onPicked: async (picks) => {
           const folder = picks.find((pick) => pick.kind === "folder");
-          if (!folder) { resolve(); return; }
+          if (!folder) { setDriveError("Select a Google Drive folder to save this material."); resolve(); return; }
           const upload = await uploadWorksheetToDrive({ token, folderId: folder.id, worksheet: generated.worksheet, title: generated.worksheet.title });
-          if (upload.ok) {
-            await fetch(`/api/teachers/generated-materials/${generated.generatedMaterialId}/drive-sync`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ driveFileId: upload.fileId, status: "synced" }) });
-            setDriveSaved(upload.name);
-          }
+          if (!upload.ok) { setDriveError(upload.error); resolve(); return; }
+          const syncResponse = await fetch(`/api/teachers/generated-materials/${generated.generatedMaterialId}/drive-sync`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ driveFileId: upload.fileId, status: "synced" }) });
+          setDriveSaved(upload.name);
+          if (!syncResponse.ok) setDriveError("Saved to Google Drive, but workspace sync could not be recorded.");
           resolve();
         },
       }));
+    } catch {
+      setDriveError("Google Drive saving failed — please try again.");
     } finally {
       setDriveSaving(false);
     }
@@ -395,8 +422,13 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
               <h3 className="mt-1 text-lg font-semibold text-gray-900">{generated.worksheet.title}</h3>
               <p className="mt-1 text-sm text-gray-500">{generated.worksheet.questions.length} questions · {shortDate(generated.generatedAt)}</p>
             </div>
-            <button type="button" onClick={() => void saveToDrive()} disabled={driveSaving} className="rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-60">{driveSaving ? "Saving…" : driveSaved ? <span className="inline-flex items-center gap-1"><Check className="h-3 w-3" /> Saved</span> : "Save to Drive"}</button>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={downloadGeneratedMaterial} className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"><Download className="h-3 w-3" /> Download</button>
+              <button type="button" onClick={() => void saveToDrive()} disabled={driveSaving} className="rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-60">{driveSaving ? "Saving…" : driveSaved ? <span className="inline-flex items-center gap-1"><Check className="h-3 w-3" /> Saved to Drive</span> : "Save to Drive"}</button>
+            </div>
           </div>
+          {driveError && <p role="alert" className="mt-3 text-right text-xs text-rose-600">{driveError}</p>}
+          {driveSaved && !driveError && <p role="status" className="mt-3 text-right text-xs text-emerald-700">Saved to Google Drive: {driveSaved}</p>}
         </div>
       )}
     </div>
