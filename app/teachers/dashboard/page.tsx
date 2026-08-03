@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Clock3, Inbox, Sparkles } from "lucide-react";
+import { ArrowRight, Clock3, FolderPlus, Inbox, Sparkles } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useTeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
@@ -105,6 +105,10 @@ export default function TeachersDashboardPage() {
 
   const email =
     authState.status === "signedIn" ? authState.session.user.email : null;
+  const workspaceSetupVisible =
+    authState.status === "signedIn" &&
+    !workspacesLoading &&
+    workspaces.length === 0;
 
   return (
     <>
@@ -139,7 +143,42 @@ export default function TeachersDashboardPage() {
         </div>
       )}
 
-      {authState.status === "signedIn" && (
+      {authState.status === "signedIn" && workspaceSetupVisible && (
+        <main className="flex h-dvh items-center justify-center bg-gray-50 px-6">
+          <section className="w-full max-w-lg text-center animate-fade-in-up">
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-900 text-white shadow-sm">
+              <FolderPlus className="h-7 w-7" aria-hidden="true" />
+            </div>
+            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-gray-400">
+              TutorMonkey Teachers
+            </p>
+            <h1 className="mb-4 font-display text-4xl font-light text-balance text-gray-900 md:text-5xl">
+              Create your first workspace
+            </h1>
+            <p className="mx-auto mb-8 max-w-md text-base font-light leading-7 text-gray-600">
+              Start with a course workspace. Your Documents and generated
+              Materials will live inside it.
+            </p>
+            {schemaStatus === "not-applied" && (
+              <p className="mx-auto mb-6 max-w-md rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm font-light text-amber-800">
+                Workspace setup is temporarily unavailable because the Teachers
+                database migration has not been applied yet.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => setAddWorkspaceOpen(true)}
+              disabled={schemaStatus !== "ready"}
+              className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-7 py-3.5 text-base font-medium text-white shadow-sm transition-all duration-300 hover:bg-gray-800 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FolderPlus className="h-4 w-4" aria-hidden="true" />
+              Add new workspace
+            </button>
+          </section>
+        </main>
+      )}
+
+      {authState.status === "signedIn" && !workspaceSetupVisible && (
         <TeachersAppShell
           email={email ?? null}
           schemaStatus={schemaStatus}
