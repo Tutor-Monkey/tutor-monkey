@@ -24,6 +24,7 @@
  */
 
 import {
+  DEFAULT_MAX_TOKENS,
   WORKSHEET_PROVIDER_NAME,
   WorksheetProviderError,
   boundLabeledSources,
@@ -33,7 +34,9 @@ import {
   buildWorksheetSystemPrompt,
   buildWorksheetUserPrompt,
   mapHttpError,
+  parseAnthropicCompletion,
   parseChatCompletion,
+  resolveAnthropicProviderConfig,
   resolveProviderConfig,
   type LabeledSource,
   type ProviderEnv,
@@ -78,7 +81,7 @@ export type GenerateWorksheetOptions = {
 
 export type GenerateWorksheetResult = {
   worksheet: Worksheet;
-  provider: typeof WORKSHEET_PROVIDER_NAME;
+  provider: string;
   model: string;
   sourceCharCount: number;
   truncatedSource: boolean;
@@ -96,7 +99,11 @@ export async function generateWorksheetFromText(
 ): Promise<GenerateWorksheetResult> {
   const env: ProviderEnv =
     options.env ?? (process.env as Record<string, string | undefined>);
-  const { baseUrl, model, apiKey } = resolveProviderConfig(env);
+  const useAnthropic = env.TEACHERS_WORKSHEET_PROVIDER?.trim().toLowerCase() === "anthropic";
+  const provider = useAnthropic ? "anthropic" : WORKSHEET_PROVIDER_NAME;
+  const { baseUrl, model, apiKey } = useAnthropic
+    ? resolveAnthropicProviderConfig(env)
+    : resolveProviderConfig(env);
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_GENERATION_TIMEOUT_MS;
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -127,9 +134,10 @@ export async function generateWorksheetFromText(
     userPrompt = buildWorksheetUserPrompt(capped.text);
   }
 
-  const payload = buildChatCompletionsPayload({
+  const systemPrompt = buildWorksheetSystemPrompt();
+  const openAiPayload = useAnthropic ? null : buildChatCompletionsPayload({
     model,
-    systemPrompt: buildWorksheetSystemPrompt(),
+    systemPrompt,
     userPrompt,
   });
 
@@ -141,15 +149,28 @@ export async function generateWorksheetFromText(
 
   let response: Response;
   try {
-    response = await fetchImpl(buildChatCompletionsUrl(baseUrl), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+    response = await fetchImpl(
+      useAnthropic ? `${baseUrl}/v1/messages` : buildChatCompletionsUrl(baseUrl),
+      {
+        method: "POST",
+        headers: useAnthropic
+          ? {
+              "Content-Type": "application/json",
+              "x-api-key": apiKey,
+              "anthropic-version": "2023-06-01",
+            }
+          : {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+        body: JSON.stringify(
+          useAnthropic
+            ? { model, max_tokens: DEFAULT_MAX_TOKENS, system: systemPrompt, messages: [{ role: "user", content: userPrompt }] }
+            : openAiPayload,
+        ),
+        signal: controller.signal,
       },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
+    );
   } catch (error) {
     if (controller.signal.aborted) {
       throw new WorksheetProviderError(
@@ -178,7 +199,7 @@ export async function generateWorksheetFromText(
   }
 
   if (!response.ok) {
-    throw mapHttpError(response.status);
+    throw mapHttpError(response.status, useAnthropic ? "ANTHROPIC_API_KEY" : "DEEPSEEK_API_KEY");
   }
 
   let parsedBody: unknown;
@@ -191,7 +212,9 @@ export async function generateWorksheetFromText(
     );
   }
 
-  const completion = parseChatCompletion(parsedBody);
+  const completion = useAnthropic
+    ? parseAnthropicCompletion(parsedBody)
+    : parseChatCompletion(parsedBody);
 
   let worksheetValue: unknown;
   try {
@@ -215,7 +238,7 @@ export async function generateWorksheetFromText(
 
   return {
     worksheet: validation.worksheet,
-    provider: WORKSHEET_PROVIDER_NAME,
+    provider,
     model,
     sourceCharCount,
     truncatedSource: truncated,

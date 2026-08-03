@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DEEPSEEK_BASE_URL,
+  ANTHROPIC_BASE_URL,
+  DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_MAX_TOKENS,
   DEFAULT_MODEL,
   WORKSHEET_PROVIDER_NAME,
@@ -11,6 +13,7 @@ import {
   buildWorksheetUserPrompt,
   mapHttpError,
   parseChatCompletion,
+  resolveAnthropicProviderConfig,
   resolveProviderConfig,
 } from "./worksheetProviderCore";
 
@@ -78,6 +81,22 @@ describe("resolveProviderConfig", () => {
     expect(() => resolveProviderConfig(env)).toThrowError(/DEEPSEEK_API_KEY/);
   });
 });
+
+describe("resolveAnthropicProviderConfig", () => {
+  it("uses the official Messages API base and temporary Sonnet default", () => {
+    expect(resolveAnthropicProviderConfig({ ANTHROPIC_API_KEY: "test-anthropic-key" })).toEqual({
+      baseUrl: ANTHROPIC_BASE_URL,
+      model: DEFAULT_ANTHROPIC_MODEL,
+      apiKey: "test-anthropic-key",
+    });
+  });
+
+  it("honors the temporary model override and fails closed without its key", () => {
+    expect(resolveAnthropicProviderConfig({ ANTHROPIC_API_KEY: "key", ANTHROPIC_MODEL: "  custom-model " }).model).toBe("custom-model");
+    expect(() => resolveAnthropicProviderConfig({})).toThrowError(/ANTHROPIC_API_KEY/);
+  });
+});
+
 
 describe("buildChatCompletionsUrl", () => {
   it("appends /chat/completions to the DeepSeek base URL", () => {

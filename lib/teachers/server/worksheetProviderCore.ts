@@ -36,6 +36,10 @@ export const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 /** Default worksheet model; DEEPSEEK_MODEL may override it. */
 export const DEFAULT_MODEL = "deepseek-v4-flash";
 
+/** Temporary test provider; enable with TEACHERS_WORKSHEET_PROVIDER=anthropic. */
+export const ANTHROPIC_BASE_URL = "https://api.anthropic.com";
+export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
+
 /** Bounded completion budget for a worksheet (tokens). */
 export const DEFAULT_MAX_TOKENS = 8_000;
 
@@ -104,6 +108,19 @@ export function resolveProviderConfig(env: ProviderEnv): ResolvedProviderConfig 
     rawModel && rawModel.trim() !== "" ? rawModel.trim() : DEFAULT_MODEL;
 
   return { baseUrl: DEEPSEEK_BASE_URL, model, apiKey };
+}
+
+export function resolveAnthropicProviderConfig(env: ProviderEnv): ResolvedProviderConfig {
+  const apiKey = env.ANTHROPIC_API_KEY;
+  if (!apiKey || apiKey.trim() === "") {
+    throw new WorksheetProviderError(
+      "MISSING_API_KEY",
+      "Temporary Anthropic testing isn't configured — add ANTHROPIC_API_KEY to the server environment.",
+    );
+  }
+  const rawModel = env.ANTHROPIC_MODEL;
+  const model = rawModel && rawModel.trim() !== "" ? rawModel.trim() : DEFAULT_ANTHROPIC_MODEL;
+  return { baseUrl: ANTHROPIC_BASE_URL, model, apiKey };
 }
 
 /**
@@ -357,17 +374,35 @@ export function parseChatCompletion(body: unknown): ParsedChatCompletion {
   };
 }
 
+export function parseAnthropicCompletion(body: unknown): ParsedChatCompletion {
+  if (typeof body !== "object" || body === null) {
+    throw new WorksheetProviderError("INVALID_RESPONSE", "The worksheet provider returned a response we couldn't read.");
+  }
+  const content = (body as Record<string, unknown>).content;
+  const first = Array.isArray(content) ? content[0] : null;
+  const text = first && typeof first === "object" ? (first as Record<string, unknown>).text : null;
+  if (typeof text !== "string" || text.trim() === "") {
+    throw new WorksheetProviderError("INVALID_RESPONSE", "The worksheet provider returned no usable content.");
+  }
+  const record = body as Record<string, unknown>;
+  return {
+    content: text,
+    model: typeof record.model === "string" ? record.model : null,
+    finishReason: typeof record.stop_reason === "string" ? record.stop_reason : null,
+  };
+}
+
 /**
  * Map a non-2xx upstream response to a typed error. Only the HTTP status is
  * surfaced — the upstream error body is deliberately not echoed (it is not
  * the source material, but it costs nothing to keep responses generic).
  */
-export function mapHttpError(status: number): WorksheetProviderError {
+export function mapHttpError(status: number, apiKeyEnv = "DEEPSEEK_API_KEY"): WorksheetProviderError {
   switch (status) {
     case 401:
       return new WorksheetProviderError(
         "UPSTREAM_ERROR",
-        "The worksheet provider rejected the API key (401). Ask the developer to check DEEPSEEK_API_KEY.",
+        `The worksheet provider rejected the API key (401). Ask the developer to check ${apiKeyEnv}.`,
         status,
       );
     case 402:
