@@ -19,6 +19,20 @@ export const ACCEPTED_EXTENSIONS = [
   ".md",
 ] as const;
 
+/**
+ * Subset of ACCEPTED_EXTENSIONS that the local text extractor
+ * (lib/teachers/extract.ts, server-only) can read. Kept here — not in the
+ * extractor module — so client components can advertise it without pulling
+ * the extractor's server dependencies into the browser bundle.
+ */
+export const EXTRACTABLE_EXTENSIONS = [
+  ".txt",
+  ".md",
+  ".docx",
+  ".pdf",
+  ".pptx",
+] as const;
+
 export const ACCEPTED_TYPES_LABEL = "PDF, Word, PowerPoint, or text";
 export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB per file
 export const MAX_FILE_SIZE_LABEL = "Up to 25 MB per file";

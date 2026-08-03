@@ -20,6 +20,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useTeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
 import { CreateWorkspacePanel } from "@/components/teachers/CreateWorkspacePanel";
 import { MaterialsIntakePanel } from "@/components/teachers/MaterialsIntakePanel";
+import { MaterialLibraryPanel } from "@/components/teachers/MaterialLibraryPanel";
 
 type AuthState =
   | { status: "loading" }
@@ -197,6 +198,11 @@ export default function TeachersDashboardPage() {
                 />
               </div>
 
+              {/* Material library: local text extraction for uploads */}
+              <div className="mb-16 animate-fade-in-up animation-delay-300">
+                <MaterialLibraryPanel schemaStatus={schemaStatus} />
+              </div>
+
               {/* Roadmap: next product surfaces */}
               <div className="animate-fade-in-up animation-delay-400">
                 <h2 className="text-2xl md:text-3xl font-light text-gray-900 mb-2 font-display text-balance">
@@ -232,7 +238,7 @@ export default function TeachersDashboardPage() {
 
                 <p className="mt-8 text-sm text-gray-500 font-light">
                   {schemaStatus === "ready"
-                    ? "Workspaces and uploads you save go to Supabase under your account — uploads land in the workspace you explicitly pick. Document reading and worksheet generation land in the next milestone."
+                    ? "Workspaces and uploads you save go to Supabase under your account — uploads land in the workspace you explicitly pick. Text extraction for uploaded materials is live now; worksheet generation lands in the next milestone."
                     : "The Teachers database migration (supabase/migrations/) is written but not applied yet — this page degrades gracefully until it is."}
                 </p>
               </div>
