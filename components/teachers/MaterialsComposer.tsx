@@ -202,6 +202,7 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
 
   function selectSuggestion(doc: ComposerSourceDoc) {
     const nextParts = replaceMention(parts, mention.start, mention.end, doc);
+    setDocs((current) => current.some((item) => item.id === doc.id) ? current : [...current, doc]);
     setParts(nextParts);
     setSuggestions([]);
     setMenuOpen(false);
@@ -252,13 +253,13 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
     if (!result.ok) return;
     const explicitIds = new Set(selectedDocs.map((doc) => doc.id));
     const suggested = result.candidates.filter((doc) => !explicitIds.has(doc.id) && isReadySourceDoc(doc)).slice(0, 4);
-    setConfirmation({ prompt, explicit: selectedDocs.filter(isReadySourceDoc), suggested });
+    setConfirmation({ prompt, explicit: selectedDocs, suggested });
   }
 
   async function confirmGeneration() {
     if (!confirmation || confirming) return;
     setConfirming(true);
-    const materialIds = Array.from(new Set([...confirmation.explicit, ...confirmation.suggested].map((doc) => doc.id)));
+    const materialIds = Array.from(new Set([...confirmation.explicit, ...confirmation.suggested].filter(isReadySourceDoc).map((doc) => doc.id)));
     const result = await requestWorkspaceGeneration(currentWorkspaceId, {
       prompt: confirmation.prompt,
       materialIds,
@@ -370,7 +371,7 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
               {confirmation.suggested.length > 0 ? confirmation.suggested.map((doc) => <div key={doc.id} className="flex items-center gap-2 py-1 text-sm text-gray-800"><FileText className="h-4 w-4 text-gray-400" />{doc.filename}</div>) : <p className="text-sm text-gray-400">No related documents found</p>}
             </div>
           </div>
-          <button type="button" onClick={() => void confirmGeneration()} disabled={confirming || confirmation.explicit.length + confirmation.suggested.length === 0} className="mt-5 inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400">{confirming && <Loader2 className="h-4 w-4 animate-spin" />}Generate material</button>
+          <button type="button" onClick={() => void confirmGeneration()} disabled={confirming || [...confirmation.explicit, ...confirmation.suggested].filter(isReadySourceDoc).length === 0} className="mt-5 inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400">{confirming && <Loader2 className="h-4 w-4 animate-spin" />}Generate material</button>
         </div>
       )}
       {generated && (

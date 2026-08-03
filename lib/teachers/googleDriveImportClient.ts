@@ -47,12 +47,31 @@ async function driveRequest<T>(token: string, url: string): Promise<T> {
 }
 
 async function listSelectedFolder(token: string, folder: GoogleDrivePick): Promise<DriveMetadata[]> {
-  const query = encodeURIComponent(`'${folder.id}' in parents and trashed = false`);
-  const fields = encodeURIComponent("nextPageToken,files(id,name,mimeType,size,parents)");
-  const result = await driveRequest<DriveListResponse>(token, `${DRIVE_API}/files?q=${query}&pageSize=100&fields=${fields}`);
-  return (result.files ?? [])
-    .filter((file) => file.mimeType !== DRIVE_FOLDER_MIME)
-    .map((file) => ({ ...file, folderPath: [folder.name] }));
+  const visited = new Set<string>();
+  const files: DriveMetadata[] = [];
+
+  async function walk(folderId: string, folderPath: string[], depth: number): Promise<void> {
+    if (visited.has(folderId) || depth > 8 || files.length >= 500) return;
+    visited.add(folderId);
+    let pageToken = "";
+    do {
+      const query = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+      const fields = encodeURIComponent("nextPageToken,files(id,name,mimeType,size,parents)");
+      const page = await driveRequest<DriveListResponse>(token, `${DRIVE_API}/files?q=${query}&pageSize=100&orderBy=name&fields=${fields}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`);
+      for (const file of page.files ?? []) {
+        if (files.length >= 500) break;
+        if (file.mimeType === DRIVE_FOLDER_MIME) {
+          await walk(file.id, [...folderPath, file.name], depth + 1);
+        } else {
+          files.push({ ...file, folderPath });
+        }
+      }
+      pageToken = page.nextPageToken ?? "";
+    } while (pageToken && files.length < 500);
+  }
+
+  await walk(folder.id, [folder.name], 0);
+  return files;
 }
 
 async function getMetadata(token: string, pick: GoogleDrivePick): Promise<DriveMetadata> {

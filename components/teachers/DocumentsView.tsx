@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Cloud,
-  Eye,
   FileText,
   Folder,
   FolderOpen,
@@ -31,21 +30,12 @@ import { readGoogleProviderToken } from "@/lib/teachers/googlePickerClient";
 import { importSelectedDrivePicks, type DriveImportOutcome } from "@/lib/teachers/googleDriveImportClient";
 import { formatBytes } from "@/lib/teachers/materials";
 import {
-  parseExtractionCount,
   shortDate,
   type MaterialStatus,
 } from "@/lib/teachers/materialDetail";
-import {
-  requestWorksheetGeneration,
-  type GenerateWorksheetOutcome,
-} from "@/lib/teachers/generateClient";
 import { MaterialStatusBadge } from "@/components/teachers/MaterialStatusBadge";
 import { FolderBreadcrumb } from "@/components/teachers/FolderBreadcrumb";
 import { GoogleDriveImportButton } from "@/components/teachers/GoogleDriveImportButton";
-import {
-  MaterialDetailModal,
-  type MaterialSummary,
-} from "@/components/teachers/MaterialDetailModal";
 import { MaterialsIntakePanel } from "@/components/teachers/MaterialsIntakePanel";
 
 type DocumentRow = {
@@ -54,8 +44,6 @@ type DocumentRow = {
   original_filename: string;
   byte_size: number | null;
   status: MaterialStatus;
-  /** PostgREST `->>` projection — normalize with parseExtractionCount. */
-  char_count: unknown;
   /** PostgREST `->>` projection of provenance.last_error.message. */
   message: string | null;
   created_at: string;
@@ -101,9 +89,6 @@ export function DocumentsView({
   const [rows, setRows] = useState<DocumentRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [detailMaterial, setDetailMaterial] = useState<MaterialSummary | null>(
-    null,
-  );
   /** Drive import gate lifted from GoogleDriveImportButton (null = checking). */
   const [driveGate, setDriveGate] = useState<GoogleDriveImportGate | null>(null);
   /** The last Picker selection while it is being imported. */
@@ -147,7 +132,7 @@ export function DocumentsView({
       const { data, error } = await supabase
         .from("materials")
         .select(
-          "id, source_type, original_filename, byte_size, status, created_at, provenance->folder_path, provenance->extraction->>char_count, provenance->last_error->>message",
+          "id, source_type, original_filename, byte_size, status, created_at, provenance->folder_path, provenance->last_error->>message",
         )
         .eq("workspace_id", currentWorkspace.id)
         .order("created_at", { ascending: false })
@@ -171,7 +156,6 @@ export function DocumentsView({
             original_filename: row.original_filename as string,
             byte_size: row.byte_size as number | null,
             status: row.status as MaterialStatus,
-            char_count: row.char_count,
             message:
               typeof row.message === "string" && row.message.trim() !== ""
                 ? row.message
@@ -201,7 +185,6 @@ export function DocumentsView({
   useEffect(() => {
     setFolderSegments([]);
     setImportOpen(false);
-    setDetailMaterial(null);
     setDrivePicks([]);
     setDriveImportResult(null);
     setDriveImporting(false);
@@ -217,7 +200,7 @@ export function DocumentsView({
             original_filename: row.original_filename,
             byte_size: row.byte_size,
             status: row.status,
-            charCount: parseExtractionCount(row.char_count),
+            charCount: null,
             created_at: row.created_at,
             folder_path: row.folder_path,
           },
@@ -231,29 +214,6 @@ export function DocumentsView({
     () => groupFolderContents(entries, folderSegments),
     [entries, folderSegments],
   );
-
-  async function runGeneration(
-    materialId: string,
-  ): Promise<GenerateWorksheetOutcome> {
-    const outcome = await requestWorksheetGeneration(materialId);
-    if (outcome.ok) {
-      await loadDocuments();
-    }
-    return outcome;
-  }
-
-  function openReview(entry: DocumentFileEntry, row: DocumentRow) {
-    setDetailMaterial({
-      id: entry.id,
-      original_filename: entry.name,
-      byte_size: entry.byteSize,
-      status: entry.status,
-      charCount: entry.charCount,
-      lastErrorMessage: row.message,
-      created_at: entry.createdAt,
-      workspace_title: entry.workspaceTitle,
-    });
-  }
 
   const emptyFolder =
     !loading && !loadError && contents.folders.length === 0 && contents.files.length === 0;
@@ -486,9 +446,6 @@ export function DocumentsView({
                             {entry.createdAt
                               ? ` · ${shortDate(entry.createdAt)}`
                               : ""}
-                            {entry.charCount != null && entry.status === "ready"
-                              ? ` · ${entry.charCount.toLocaleString()} characters extracted`
-                              : ""}
                           </p>
                           {row?.message && (
                             <p
@@ -503,17 +460,6 @@ export function DocumentsView({
                             </p>
                           )}
                         </div>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => row && openReview(entry, row)}
-                          disabled={!isReady || !row}
-                          className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 shadow-sm transition-all duration-300 hover:bg-gray-50 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                          Review
-                        </button>
                       </div>
                     </li>
                   );
@@ -548,19 +494,8 @@ export function DocumentsView({
 
       <p className="mt-4 flex items-start gap-2 text-xs text-gray-500 font-light">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
-        Uploaded documents are parsed automatically, exactly once, when they
-        are uploaded — text is saved to the workspace and failures are shown
-        here honestly. Extracted text loads only when you open a document.
+        Documents are organized by their imported folder paths. Files are parsed automatically in the background.
       </p>
-
-      {detailMaterial && (
-        <MaterialDetailModal
-          material={detailMaterial}
-          schemaStatus={schemaStatus}
-          onClose={() => setDetailMaterial(null)}
-          onGenerate={runGeneration}
-        />
-      )}
     </section>
   );
 }
