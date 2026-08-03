@@ -39,19 +39,22 @@ export async function GET(
 
   const { data: generated } = await supabase
     .from("generated_materials")
-    .select("id, content, provider, model, created_at")
+    .select("id, content, provider, model, created_at, generation_status, generation_error, title")
     .eq("generation_job_id", jobId)
     .eq("workspace_id", params.workspaceId)
     .maybeSingle();
 
   return json({
     jobId: job.id,
-    status: generated ? "succeeded" : job.status,
-    error: job.error,
+    status: generated?.generation_status ?? job.status,
+    error: generated?.generation_error ?? job.error,
     updatedAt: job.updated_at,
     generated: generated
       ? {
           generatedMaterialId: generated.id,
+          title: generated.title,
+          status: generated.generation_status,
+          error: generated.generation_error,
           worksheet: generated.content,
           provider: generated.provider,
           model: generated.model,

@@ -28,6 +28,16 @@ type MaterialRow = {
   worksheet: unknown;
 };
 
+type GeneratedMaterialListRow = {
+  id: string;
+  title: string;
+  status: "generating" | "completed" | "failed";
+  error: string | null;
+  content: GeneratedComposerMaterial["worksheet"];
+  provider: string | null;
+  model: string | null;
+  created_at: string;
+};
 type MaterialsViewProps = {
   schemaStatus: TeachersSchemaStatus;
   currentWorkspace: WorkspaceSummary | null;
@@ -40,7 +50,7 @@ export function MaterialsView({ schemaStatus, currentWorkspace }: MaterialsViewP
   const [loadError, setLoadError] = useState<string | null>(null);
   const [detailMaterial, setDetailMaterial] = useState<MaterialSummary | null>(null);
   const [recentGenerated, setRecentGenerated] = useState<GeneratedComposerMaterial[]>([]);
-  const [generatedRows, setGeneratedRows] = useState<GeneratedComposerMaterial[]>([]);
+  const [generatedRows, setGeneratedRows] = useState<GeneratedMaterialListRow[]>([]);
   const isReady = schemaStatus === "ready";
 
   const loadMaterials = useCallback(async () => {
@@ -72,7 +82,7 @@ export function MaterialsView({ schemaStatus, currentWorkspace }: MaterialsViewP
       })) ?? []);
       const { data: generated, error: generatedError } = await supabase
         .from("generated_materials")
-        .select("id, content, provider, model, created_at")
+        .select("id, title, content, provider, model, created_at, generation_status, generation_error")
         .eq("workspace_id", currentWorkspace.id)
         .order("created_at", { ascending: false })
         .limit(100);
@@ -80,19 +90,16 @@ export function MaterialsView({ schemaStatus, currentWorkspace }: MaterialsViewP
         setLoadError("Couldn't load generated materials — please refresh.");
         return;
       }
-      setGeneratedRows((generated ?? []).flatMap((row) => {
-        const content = row.content as GeneratedComposerMaterial["worksheet"];
-        if (!content || typeof content !== "object" || !Array.isArray(content.questions)) return [];
-        return [{
-          generatedMaterialId: row.id as string,
-          worksheet: content,
-          provider: typeof row.provider === "string" ? row.provider : "unknown",
-          model: typeof row.model === "string" ? row.model : "unknown",
-          sourceCharCount: 0,
-          truncatedSource: false,
-          generatedAt: row.created_at as string,
-        }];
-      }));
+      setGeneratedRows((generated ?? []).map((row) => ({
+        id: row.id as string,
+        title: typeof row.title === "string" ? row.title : "Generated material",
+        status: row.generation_status === "failed" || row.generation_status === "generating" ? row.generation_status : "completed",
+        error: typeof row.generation_error === "string" ? row.generation_error : null,
+        content: (row.content && typeof row.content === "object" ? row.content : { title: "Generating material…", questions: [] }) as GeneratedComposerMaterial["worksheet"],
+        provider: typeof row.provider === "string" ? row.provider : null,
+        model: typeof row.model === "string" ? row.model : null,
+        created_at: row.created_at as string,
+      })));
     } catch {
       setLoadError("Couldn't load this workspace's materials — please refresh.");
     } finally {
@@ -159,13 +166,25 @@ export function MaterialsView({ schemaStatus, currentWorkspace }: MaterialsViewP
         <div className="mx-auto mt-28 max-w-3xl border-t border-gray-200 pt-8">
           <h2 className="mb-5 text-sm font-medium text-gray-500">Generated materials</h2>
           <div className="space-y-2">
-            {generatedRows.map((material) => (
-              <div key={material.generatedMaterialId} className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
-                <div className="min-w-0"><p className="truncate text-sm font-medium text-gray-900">{material.worksheet.title}</p><p className="mt-1 text-xs text-gray-500">{material.worksheet.questions.length} questions · {shortDate(material.generatedAt)}</p></div>
-                <span className="shrink-0 text-xs text-gray-400">Generated</span>
-              </div>
-            ))}
-            {recentGenerated.filter((material) => !generatedRows.some((row) => row.generatedMaterialId === material.generatedMaterialId)).map((material) => (
+            {generatedRows.map((material) => {
+              const isGenerating = material.status === "generating";
+              const isFailed = material.status === "failed";
+              return (
+                <div key={material.id} className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-900">{material.title}</p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {isGenerating ? "Generating your material…" : isFailed ? (material.error ?? "Generation failed — try again.") : `${Array.isArray(material.content.questions) ? material.content.questions.length : 0} questions · ${shortDate(material.created_at)}`}
+                    </p>
+                  </div>
+                  <span className={`flex shrink-0 items-center gap-1.5 text-xs ${isFailed ? "text-rose-600" : "text-gray-400"}`}>
+                    {isGenerating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    {isGenerating ? "Generating" : isFailed ? "Failed" : "Generated"}
+                  </span>
+                </div>
+              );
+            })}
+            {recentGenerated.filter((material) => !generatedRows.some((row) => row.id === material.generatedMaterialId)).map((material) => (
               <div key={material.generatedMaterialId} className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
                 <div className="min-w-0"><p className="truncate text-sm font-medium text-gray-900">{material.worksheet.title}</p><p className="mt-1 text-xs text-gray-500">{material.worksheet.questions.length} questions · {shortDate(material.generatedAt)}</p></div>
                 <span className="shrink-0 text-xs text-gray-400">Generated</span>

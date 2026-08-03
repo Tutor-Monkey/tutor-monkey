@@ -215,11 +215,11 @@ async function pollWorkspaceGeneration(
       const body = (await response.json().catch(() => null)) as {
         status?: unknown;
         error?: unknown;
-        generated?: { generatedMaterialId?: unknown; worksheet?: unknown; provider?: unknown; model?: unknown; generatedAt?: unknown } | null;
+        generated?: { generatedMaterialId?: unknown; title?: unknown; status?: unknown; error?: unknown; worksheet?: unknown; provider?: unknown; model?: unknown; generatedAt?: unknown } | null;
       } | null;
       if (!response.ok) return { ok: false, error: "Couldn't check generation progress — refresh Materials to see the result.", status: response.status, migrationPending: false };
       if (body?.status === "failed") return { ok: false, error: typeof body.error === "string" ? body.error : "Worksheet generation failed — please try again.", status: 500, migrationPending: false };
-      if (body?.status !== "succeeded" || !body.generated) continue;
+      if (body?.status !== "completed" || !body.generated) continue;
       const validation = validateWorksheet(body.generated.worksheet);
       const generatedMaterialId = typeof body.generated.generatedMaterialId === "string" ? body.generated.generatedMaterialId : "";
       if (!validation.ok || generatedMaterialId === "") return { ok: false, error: "The generated worksheet couldn't be validated — please try again.", status: 502, migrationPending: false };

@@ -227,9 +227,26 @@ export async function POST(
     );
   }
 
-  // Acknowledge only after the durable job exists. The server continues this
-  // task independently of the browser tab; the Materials view can poll the
-  // job and generated_materials row after reconnecting.
+  const { data: placeholder, error: placeholderError } = await supabase
+    .from("generated_materials")
+    .insert({
+      workspace_id: workspaceId,
+      title: `Generating: ${prompt.prompt.slice(0, 96)}`,
+      material_type: "worksheet",
+      content: { title: "Generating material…", questions: [] },
+      source_document_ids: materialIds.ids,
+      generation_job_id: job.id,
+      generation_status: "generating",
+    })
+    .select("id")
+    .single();
+  if (placeholderError || !placeholder) {
+    console.error("TutorMonkey Teachers: generation placeholder insert failed", workspaceId, placeholderError?.message);
+    await markJobFailed(supabase, job.id, "The generation card couldn't be created — please try again.");
+    return json({ error: "Couldn't start worksheet generation — please try again." }, 500);
+  }
+
+  // Acknowledge only after both the durable job and visible placeholder exist.
   void completeGeneration({
     supabase,
     workspaceId,
@@ -237,6 +254,7 @@ export async function POST(
     prompt: prompt.prompt,
     sources,
     jobId: job.id,
+    generatedMaterialId: placeholder.id,
   });
   return json({ jobId: job.id, status: "running" }, 202);
 }
@@ -248,6 +266,7 @@ type CompleteGenerationOptions = {
   prompt: string;
   sources: { label: string; text: string }[];
   jobId: string;
+  generatedMaterialId: string;
 };
 
 async function completeGeneration({
@@ -257,6 +276,7 @@ async function completeGeneration({
   prompt,
   sources,
   jobId,
+  generatedMaterialId,
 }: CompleteGenerationOptions): Promise<void> {
   try {
     const result = await generateWorksheetFromText({
@@ -265,24 +285,25 @@ async function completeGeneration({
     });
     const { data: generated, error: saveError } = await supabase
       .from("generated_materials")
-      .insert({
-        workspace_id: workspaceId,
+      .update({
         title: result.worksheet.title,
-        material_type: "worksheet",
         content: result.worksheet,
         source_document_ids: materialIds,
         provider: result.provider,
         model: result.model,
-        generation_job_id: jobId,
+        generation_status: "completed",
+        generation_error: null,
       })
-      .select("id, created_at")
+      .eq("id", generatedMaterialId)
+      .eq("generation_job_id", jobId)
+      .select("id")
       .single();
 
     if (saveError || !generated) {
       const message = saveError && isMissingTableError(saveError)
         ? "Worksheet generation isn't available yet — the Teachers database migration hasn't been applied to this project."
         : "The worksheet was generated, but saving it to your workspace failed.";
-      await markJobFailed(supabase, jobId, message);
+      await markJobFailed(supabase, jobId, message, generatedMaterialId);
       return;
     }
 
@@ -298,7 +319,7 @@ async function completeGeneration({
       ? (providerErrorStatus(error.code) === 503 ? error.message : providerFacingMessage(error.code, error.message))
       : "Worksheet generation hit an unexpected error — please try again.";
     console.error("TutorMonkey Teachers: background worksheet generation failed", workspaceId, error instanceof WorksheetProviderError ? error.code : error);
-    await markJobFailed(supabase, jobId, message);
+    await markJobFailed(supabase, jobId, message, generatedMaterialId);
   }
 }
 
@@ -368,10 +389,18 @@ async function markJobFailed(
   supabase: SupabaseClient,
   jobId: string | null,
   message: string,
+  generatedMaterialId?: string,
 ): Promise<void> {
   if (!jobId) return;
   await supabase
     .from("processing_jobs")
     .update({ status: "failed", error: message })
     .eq("id", jobId);
+  if (generatedMaterialId) {
+    await supabase
+      .from("generated_materials")
+      .update({ generation_status: "failed", generation_error: message })
+      .eq("id", generatedMaterialId)
+      .eq("generation_job_id", jobId);
+  }
 }
