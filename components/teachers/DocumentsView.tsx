@@ -93,6 +93,7 @@ export function DocumentsView({
   const [driveGate, setDriveGate] = useState<GoogleDriveImportGate | null>(null);
   /** The last Picker selection while it is being imported. */
   const [drivePicks, setDrivePicks] = useState<GoogleDrivePick[]>([]);
+  const [driveFolderPaths, setDriveFolderPaths] = useState<string[][]>([]);
   const [driveImporting, setDriveImporting] = useState(false);
   const [driveImportResult, setDriveImportResult] = useState<DriveImportOutcome | null>(null);
 
@@ -103,6 +104,7 @@ export function DocumentsView({
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
     setDrivePicks(picks);
+    setDriveFolderPaths(picks.filter((pick) => pick.kind === "folder").map((pick) => [pick.name]));
     setDriveImportResult(null);
     setDriveImporting(true);
     void readGoogleProviderToken().then((token) => {
@@ -186,6 +188,7 @@ export function DocumentsView({
     setFolderSegments([]);
     setImportOpen(false);
     setDrivePicks([]);
+    setDriveFolderPaths([]);
     setDriveImportResult(null);
     setDriveImporting(false);
   }, [currentWorkspace?.id]);
@@ -210,10 +213,19 @@ export function DocumentsView({
     [rows, currentWorkspace?.title],
   );
 
-  const contents = useMemo(
-    () => groupFolderContents(entries, folderSegments),
-    [entries, folderSegments],
-  );
+  const contents = useMemo(() => {
+    const base = groupFolderContents(entries, folderSegments);
+    const folders = [...base.folders];
+    for (const path of driveFolderPaths) {
+      if (path.length <= folderSegments.length || !folderSegments.every((segment, index) => path[index] === segment)) continue;
+      const childPath = path.slice(0, folderSegments.length + 1);
+      if (!folders.some((folder) => folderPathKey(folder.path) === folderPathKey(childPath))) {
+        folders.push({ name: childPath[childPath.length - 1], path: childPath });
+      }
+    }
+    folders.sort((a, b) => a.name.localeCompare(b.name));
+    return { folders, files: base.files };
+  }, [entries, folderSegments, driveFolderPaths]);
 
   const emptyFolder =
     !loading && !loadError && contents.folders.length === 0 && contents.files.length === 0;
@@ -286,9 +298,9 @@ export function DocumentsView({
                 {driveImportResult.skipped.length > 0 ? `${driveImportResult.skipped.length} already imported. ` : ""}
                 {driveImportResult.failed.length > 0 ? `${driveImportResult.failed.length} could not be imported.` : ""}
               </p>
-            ) : <p className="mt-1 font-light text-blue-800/80">The selected files are being downloaded and added to this workspace. Text extraction starts automatically.</p>}
+            ) : <p className="mt-1 font-light text-blue-800/80">The selected folder is being indexed recursively. File contents remain in Drive until a document is used.</p>}
           </div>
-          {!driveImporting && <button type="button" onClick={() => { setDrivePicks([]); setDriveImportResult(null); }} aria-label="Dismiss Drive import status" className="shrink-0 rounded-lg p-1 text-blue-400 transition-colors hover:bg-blue-100 hover:text-blue-700"><X className="h-4 w-4" aria-hidden="true" /></button>}
+          {!driveImporting && <button type="button" onClick={() => { setDrivePicks([]); setDriveFolderPaths([]); setDriveImportResult(null); }} aria-label="Dismiss Drive import status" className="shrink-0 rounded-lg p-1 text-blue-400 transition-colors hover:bg-blue-100 hover:text-blue-700"><X className="h-4 w-4" aria-hidden="true" /></button>}
         </div>
       )}
 
