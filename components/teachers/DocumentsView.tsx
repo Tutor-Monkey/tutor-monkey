@@ -14,6 +14,12 @@ import {
   ScanText,
   UploadCloud,
   X,
+  ChevronDown,
+  ChevronRight,
+  FilePlus2,
+  FolderPlus as FolderPlusIcon,
+  MoreHorizontal,
+  PanelLeftClose,
 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { TeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
@@ -34,7 +40,6 @@ import {
   type MaterialStatus,
 } from "@/lib/teachers/materialDetail";
 import { MaterialStatusBadge } from "@/components/teachers/MaterialStatusBadge";
-import { FolderBreadcrumb } from "@/components/teachers/FolderBreadcrumb";
 import { GoogleDriveImportButton } from "@/components/teachers/GoogleDriveImportButton";
 import { MaterialsIntakePanel } from "@/components/teachers/MaterialsIntakePanel";
 
@@ -261,47 +266,30 @@ export function DocumentsView({
   return (
     <section
       aria-label="Documents"
-      className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm md:p-8"
+      className="min-h-full rounded-[20px] border border-[#454652] bg-[#20212b] p-6 text-[#f4f4f5] md:p-8"
     >
-      {/* Toolbar: breadcrumb + import actions */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <FolderBreadcrumb
-          segments={folderSegments}
-          onNavigate={setFolderSegments}
-          activeLabel={importOpen ? "Import" : undefined}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setImportOpen((open) => !open)}
-            disabled={!isReady || !currentWorkspace}
-            title={
-              !currentWorkspace
-                ? "Pick a workspace first"
-                : importOpen
-                  ? "Back to the document browser"
-                  : "Upload source documents into this workspace"
-            }
-            className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all duration-300 hover:bg-gray-800 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <UploadCloud className="h-4 w-4" aria-hidden="true" />
-            {importOpen ? "Back to documents" : "Import documents"}
+      <div className="-mx-6 -mt-6 mb-4 border-b border-[#3b3d49] px-4 pb-3 pt-4 md:-mx-8 md:-mt-8 md:px-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[18px] font-semibold tracking-tight text-[#f4f4f5]">Explorer</h2>
+          <button type="button" aria-label="Explorer actions" className="rounded-md p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white">
+            <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
           </button>
-          <GoogleDriveImportButton
-            mode="files"
-            label="Import Drive files"
-            onPicked={handleDrivePicked}
-            onGateChange={setDriveGate}
-            disabled={!isReady || !currentWorkspace}
-          />
-          <GoogleDriveImportButton
-            mode="folders"
-            label="Import a Drive folder"
-            onPicked={handleDrivePicked}
-            onGateChange={setDriveGate}
-            disabled={!isReady || !currentWorkspace}
-          />
         </div>
+        <div className="mt-6 flex items-center gap-2 px-1">
+          <button type="button" onClick={() => setFolderSegments([])} aria-label="Collapse workspace" className="rounded p-0.5 text-[#c7c8ce] hover:bg-[#30323d]">
+            {folderSegments.length === 0 ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+          </button>
+          <span className="min-w-0 flex-1 truncate text-[17px] font-semibold text-[#f4f4f5]">{currentWorkspace?.title ?? "workspace"}</span>
+          <button type="button" onClick={() => setImportOpen(true)} disabled={!isReady || !currentWorkspace} aria-label="New document" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white disabled:opacity-40"><FilePlus2 className="h-5 w-5" /></button>
+          <button type="button" onClick={() => setImportOpen(true)} disabled={!isReady || !currentWorkspace} aria-label="New folder" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white disabled:opacity-40"><FolderPlusIcon className="h-5 w-5" /></button>
+          <button type="button" onClick={() => void loadDocuments()} disabled={loading} aria-label="Refresh explorer" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white disabled:opacity-40"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button>
+          <button type="button" onClick={() => setFolderSegments([])} aria-label="Collapse all folders" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white"><PanelLeftClose className="h-5 w-5" /></button>
+        </div>
+      </div>
+
+      <div className="mb-3 flex items-center gap-2 border-b border-[#30323d] pb-2 text-xs text-[#858896]">
+        <button type="button" onClick={() => setImportOpen((open) => !open)} disabled={!isReady || !currentWorkspace} className="rounded px-2 py-1 hover:bg-[#30323d] hover:text-white">{importOpen ? "Back to files" : "Import files"}</button>
+        <GoogleDriveImportButton mode="folders" label="Import folder" onPicked={handleDrivePicked} onGateChange={setDriveGate} disabled={!isReady || !currentWorkspace} />
       </div>
 
       {driveGate && !driveGate.available && (
@@ -391,7 +379,7 @@ export function DocumentsView({
       )}
 
       {currentWorkspace && !importOpen && !loading && !loadError && (
-        <div className="space-y-6">
+        <div className="space-y-1">
           {emptyFolder && (
             <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/60 px-6 py-12 text-center">
               <ScanText
@@ -423,19 +411,20 @@ export function DocumentsView({
 
           {contents.folders.length > 0 && (
             <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <h3 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#858896]">
                 Folders
               </h3>
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              <ul className="space-y-0.5">
                 {contents.folders.map((folder) => (
                   <li key={folderPathKey(folder.path)}>
                     <button
                       type="button"
                       onClick={() => setFolderSegments(folder.path)}
-                      className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-left transition-colors hover:border-gray-300 hover:bg-gray-100"
+                      className={`flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-[15px] transition-colors ${folderPathKey(folder.path) === folderPathKey(folderSegments) ? "border-[#6d8de6] bg-[#303343] text-white" : "border-transparent text-[#e4e4e7] hover:bg-[#2b2d38]"}`}
                       draggable
                       onDragStart={(event) => event.dataTransfer.setData("application/x-tutormonkey-folder", JSON.stringify({ name: folder.name, path: folder.path }))}
                     >
+                      <ChevronRight className="h-4 w-4 shrink-0 text-[#b8bac4]" aria-hidden="true" />
                       <Folder
                         className="h-5 w-5 shrink-0 text-amber-500"
                         aria-hidden="true"
@@ -454,10 +443,10 @@ export function DocumentsView({
 
           {contents.files.length > 0 && (
             <div>
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <h3 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#858896]">
                 Files
               </h3>
-              <ul className="space-y-2">
+              <ul className="space-y-0.5">
                 {contents.files.map((entry) => {
                   const row = rows.find((r) => r.id === entry.id);
                   return (
@@ -465,17 +454,17 @@ export function DocumentsView({
                       key={entry.id}
                       draggable
                       onDragStart={(event) => event.dataTransfer.setData("application/x-tutormonkey-document", JSON.stringify(entry))}
-                      className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 transition-colors hover:border-gray-300 hover:bg-gray-100 sm:flex-row sm:items-start sm:justify-between"
+                      className="flex cursor-grab items-center gap-2 rounded-md border border-transparent px-2 py-1.5 transition-colors hover:bg-[#2b2d38]"
                     >
-                      <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex min-w-0 items-center gap-2">
                         <FileText
-                          className="mt-0.5 h-4 w-4 shrink-0 text-gray-400"
+                          className="h-4 w-4 shrink-0 text-[#7aa2f7]"
                           aria-hidden="true"
                         />
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <p
-                              className="truncate text-sm font-medium text-gray-900"
+                              className="truncate text-[15px] text-[#e4e4e7]"
                               title={entry.name}
                             >
                               {entry.name}

@@ -196,12 +196,11 @@ export function TeachersAppShell({
 
       <div className="flex min-h-0 flex-1">
         {/* Desktop sidebar */}
-        <aside className="hidden w-[22rem] shrink-0 flex-col border-r border-gray-200 bg-white lg:flex">
+        <aside className="hidden w-[22rem] shrink-0 flex-col border-r border-[#454652] bg-[#20212b] lg:flex">
           <div className="flex-1 min-h-0 overflow-y-auto">
-            <div className="border-b border-gray-100 px-3 pt-4">{renderWorkspaceSwitcher(false)}</div>
-            {leftPane ?? renderTabNav(false)}
+            {leftPane ?? <div className="px-3 pt-4">{renderWorkspaceSwitcher(false)}{renderTabNav(false)}</div>}
           </div>
-          <div className="border-t border-gray-100 p-4">
+          <div className="border-t border-[#3b3d49] p-4">
             <Link
               href="/teachers"
               className="flex items-center gap-2 text-xs font-medium text-gray-500 transition-colors hover:text-gray-900"
@@ -243,7 +242,7 @@ export function TeachersAppShell({
                 <div className="px-3 pt-4">{renderWorkspaceSwitcher(true)}</div>
                 {leftPane ?? renderTabNav(true)}
               </div>
-              <div className="border-t border-gray-100 p-4">
+              <div className="border-t border-[#3b3d49] p-4">
                 <Link
                   href="/teachers"
                   onClick={() => setDrawerOpen(false)}
