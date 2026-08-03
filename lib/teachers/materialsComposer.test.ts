@@ -148,7 +148,7 @@ describe("boundSuggestionLimit", () => {
 
   it("parses valid values and clamps to the max", () => {
     expect(boundSuggestionLimit("5")).toBe(5);
-    expect(boundSuggestionLimit("999")).toBe(SUGGESTION_LIMIT_MAX);
+    expect(boundSuggestionLimit("9999")).toBe(SUGGESTION_LIMIT_MAX);
   });
 });
 

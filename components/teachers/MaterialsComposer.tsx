@@ -485,7 +485,8 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
             {pendingSources.map((doc) => (
               <span key={doc.id} className="inline-flex max-w-full items-center gap-1 rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-xs text-indigo-900">
                 <FileText className="h-3 w-3 shrink-0" />
-                <span className="max-w-[18rem] truncate">{doc.filename}</span>
+                <span className="max-w-[18rem] truncate" title={doc.folderSegments.length > 0 ? doc.folderSegments.join(" / ") : "Workspace root"}>{doc.filename}</span>
+                <span className="max-w-[12rem] truncate text-[10px] text-indigo-500">{doc.folderSegments.length > 0 ? doc.folderSegments.join(" / ") : "Workspace root"}</span>
                 <button type="button" aria-label={`Remove ${doc.filename}`} onClick={() => setPendingSources((current) => current.filter((item) => item.id !== doc.id))} className="rounded-full p-0.5 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-900">×</button>
               </span>
             ))}

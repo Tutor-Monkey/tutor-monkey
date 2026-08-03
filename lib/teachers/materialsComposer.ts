@@ -129,7 +129,7 @@ export function replaceMentionRange(
 /** Default / maximum number of candidates the suggestion UI may show. */
 export const SUGGESTION_LIMIT_DEFAULT = 10;
 export const SUGGESTION_LIMIT_UI = 20;
-export const SUGGESTION_LIMIT_MAX = 100;
+export const SUGGESTION_LIMIT_MAX = 2_000;
 
 /**
  * Bound a raw `limit` value (URL param) into [1, SUGGESTION_LIMIT_MAX].
@@ -190,7 +190,18 @@ export function rankDocumentCandidates(
     const filename = doc.filename.toLowerCase();
     let score = -1;
 
-    if (filename === needle) {
+    if (needleTokens.length > 1) {
+      const filenameTokens = tokenize(doc.filename);
+      const folderTokens = tokenize(doc.folderSegments.join(" "));
+      const filenameMatches = needleTokens.filter((token) => filenameTokens.some((candidate) => candidate.includes(token))).length;
+      const folderMatches = needleTokens.filter((token) => folderTokens.some((candidate) => candidate.includes(token))).length;
+      if (filenameMatches > 0 || folderMatches > 0) {
+        // Folder matches are stronger context than a generic repeated filename
+        // such as "Practice Questions". Exact phrase and token coverage win.
+        const phraseMatch = filename.includes(needle) || doc.folderSegments.join(" ").toLowerCase().includes(needle);
+        score = 40 - filenameMatches * 4 - folderMatches * 8 - (phraseMatch ? 8 : 0);
+      }
+    } else if (filename === needle) {
       score = 0;
     } else if (filename.startsWith(needle)) {
       score = 1;

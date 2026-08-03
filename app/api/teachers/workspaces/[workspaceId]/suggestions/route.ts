@@ -21,7 +21,7 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Workspace materials fetched per suggestions request (newest first). */
-const CANDIDATE_QUERY_LIMIT = 100;
+const CANDIDATE_QUERY_LIMIT = 2_000;
 
 /**
  * Columns every applied schema has. folder_id is appended separately and
