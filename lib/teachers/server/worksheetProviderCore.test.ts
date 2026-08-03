@@ -13,6 +13,7 @@ import {
   buildWorksheetUserPrompt,
   mapHttpError,
   parseChatCompletion,
+  parseWorksheetJsonContent,
   resolveAnthropicProviderConfig,
   resolveProviderConfig,
 } from "./worksheetProviderCore";
@@ -219,6 +220,22 @@ describe("parseChatCompletion", () => {
     }
   });
 });
+
+describe("parseWorksheetJsonContent", () => {
+  it("accepts raw JSON and fenced JSON", () => {
+    expect(parseWorksheetJsonContent('{"ok":true}')).toEqual({ ok: true });
+    expect(parseWorksheetJsonContent("```json\n" + '{"ok":true}' + "\n```")).toEqual({ ok: true });
+  });
+
+  it("extracts a JSON object from brief surrounding model prose", () => {
+    expect(parseWorksheetJsonContent('Here is the worksheet:\n{"ok":true}\n')).toEqual({ ok: true });
+  });
+
+  it("rejects content without a valid JSON object", () => {
+    expect(() => parseWorksheetJsonContent("I cannot do that.")).toThrowError(WorksheetProviderError);
+  });
+});
+
 
 describe("mapHttpError", () => {
   it("maps 401 and 402 to UPSTREAM_ERROR with the status", () => {

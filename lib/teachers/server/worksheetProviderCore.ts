@@ -374,6 +374,32 @@ export function parseChatCompletion(body: unknown): ParsedChatCompletion {
   };
 }
 
+export function parseWorksheetJsonContent(content: string): unknown {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const candidate = fenced?.[1]?.trim() ?? trimmed;
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    const start = candidate.indexOf("{");
+    const end = candidate.lastIndexOf("}");
+    if (start < 0 || end <= start) {
+      throw new WorksheetProviderError(
+        "INVALID_RESPONSE",
+        "The worksheet provider returned content that wasn't valid JSON — try again.",
+      );
+    }
+    try {
+      return JSON.parse(candidate.slice(start, end + 1));
+    } catch {
+      throw new WorksheetProviderError(
+        "INVALID_RESPONSE",
+        "The worksheet provider returned content that wasn't valid JSON — try again.",
+      );
+    }
+  }
+}
+
 export function parseAnthropicCompletion(body: unknown): ParsedChatCompletion {
   if (typeof body !== "object" || body === null) {
     throw new WorksheetProviderError("INVALID_RESPONSE", "The worksheet provider returned a response we couldn't read.");

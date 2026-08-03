@@ -36,6 +36,7 @@ import {
   mapHttpError,
   parseAnthropicCompletion,
   parseChatCompletion,
+  parseWorksheetJsonContent,
   resolveAnthropicProviderConfig,
   resolveProviderConfig,
   type LabeledSource,
@@ -216,15 +217,7 @@ export async function generateWorksheetFromText(
     ? parseAnthropicCompletion(parsedBody)
     : parseChatCompletion(parsedBody);
 
-  let worksheetValue: unknown;
-  try {
-    worksheetValue = JSON.parse(completion.content);
-  } catch {
-    throw new WorksheetProviderError(
-      "INVALID_RESPONSE",
-      "The worksheet provider returned content that wasn't valid JSON — try again.",
-    );
-  }
+  const worksheetValue = parseWorksheetJsonContent(completion.content);
 
   const validation = validateWorksheet(worksheetValue);
   if (!validation.ok) {
