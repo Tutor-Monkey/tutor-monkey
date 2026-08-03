@@ -64,7 +64,7 @@ describe("describeGoogleDriveImportGate", () => {
       expect(gate.caption).toMatch(/browser-restricted API key/);
       expect(gate.caption).toMatch(/NEXT_PUBLIC_GOOGLE_PICKER_API_KEY/);
       expect(gate.caption).toMatch(/NEXT_PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER/);
-      expect(gate.caption).toMatch(/drive\.file/);
+      expect(gate.caption).toMatch(/read-only|drive\.file/);
     }
   });
 
@@ -76,12 +76,12 @@ describe("describeGoogleDriveImportGate", () => {
     expect(gate.available).toBe(false);
     if (!gate.available) {
       expect(gate.reason).toBe("no-provider-token");
-      expect(gate.caption).toMatch(/drive\.file/);
-      expect(gate.caption).toMatch(/sign out and sign back in/);
+      expect(gate.caption).toMatch(/read-only|drive\.file/);
+      expect(gate.caption).toMatch(/sign out and sign back in/i);
     }
   });
 
-  it("never mentions a full-drive scope", () => {
+  it("explains the read-only Drive authorization requirement", () => {
     const notConfigured = describeGoogleDriveImportGate({
       publicConfig: null,
       hasProviderToken: true,
@@ -96,14 +96,8 @@ describe("describeGoogleDriveImportGate", () => {
           !gate.available,
       )
       .map((gate) => gate.caption);
-    // Every drive.* scope token in the setup copy must be exactly drive.file.
-    const scopesMentioned = captions.flatMap(
-      (caption) => caption.match(/drive\.[a-z.]+/g) ?? [],
-    );
-    expect(scopesMentioned.length).toBeGreaterThan(0);
-    for (const scope of scopesMentioned) {
-      expect(scope).toBe("drive.file");
-    }
+    expect(captions.join(" ")).toMatch(/read-only|read access/i);
+    expect(captions.join(" ")).toMatch(/explicitly selected|Picker folder/i);
   });
 });
 

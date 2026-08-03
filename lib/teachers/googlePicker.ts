@@ -93,7 +93,7 @@ export function describeGoogleDriveImportGate(input: {
       reason: "not-configured",
       label: "Google Drive import isn't configured yet",
       caption:
-        "To turn it on: enable the Google Picker API in Google Cloud Console, create a browser-restricted API key, then set NEXT_PUBLIC_GOOGLE_PICKER_API_KEY and NEXT_PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER. Access stays limited to the drive.file scope — only files you explicitly pick.",
+        "To turn it on: enable the Google Picker API in Google Cloud Console, create a browser-restricted API key, then set NEXT_PUBLIC_GOOGLE_PICKER_API_KEY and NEXT_PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER. The app uses read-only Drive traversal plus explicit Picker selection; it never writes to Drive during import.",
     };
   }
   if (!input.hasProviderToken) {
@@ -102,7 +102,7 @@ export function describeGoogleDriveImportGate(input: {
       reason: "no-provider-token",
       label: "Google Drive isn't connected to this sign-in",
       caption:
-        "Signing in with Google covers your identity only. After adding the https://www.googleapis.com/auth/drive.file scope to the OAuth consent screen, sign out and sign back in so the session carries a Drive token. Full Drive access is never requested.",
+        "Signing in with Google covers your identity only. Sign out and sign back in after granting Drive read access so the session carries a token for recursive folder traversal. Import remains read-only and only starts from an explicitly selected Picker folder.",
     };
   }
   return { available: true };

@@ -407,7 +407,7 @@ export function describeDriveSaveFailure(input: {
       reason: "no-token",
       status: null,
       message:
-        "Google Drive isn't connected to this sign-in. Sign out and back in after granting Drive access (drive.file only), then try again.",
+        "Google Drive isn't connected to this sign-in. Sign out and sign back in after granting Drive read access, then try again.",
     };
   }
   if (input.status === 401) {
