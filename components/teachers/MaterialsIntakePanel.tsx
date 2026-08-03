@@ -73,6 +73,13 @@ type BatchResult = {
 type MaterialsIntakePanelProps = {
   schemaStatus: TeachersSchemaStatus;
   userId: string;
+  /**
+   * Seed the workspace picker with this workspace when the user hasn't made
+   * an explicit choice yet (e.g. opening import from inside a workspace's
+   * Documents view). Explicit user choices always win; when the seed is
+   * stale it is dropped like any other invalid selection.
+   */
+  initialWorkspaceId?: string;
 };
 
 /** Human-readable explanation for a storage/DB write failure. */
@@ -129,6 +136,7 @@ function describeUploadError(
 export function MaterialsIntakePanel({
   schemaStatus,
   userId,
+  initialWorkspaceId,
 }: MaterialsIntakePanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
@@ -156,17 +164,24 @@ export function MaterialsIntakePanel({
 
       if (!error && data) {
         setWorkspaces(data as WorkspaceRow[]);
-        // Drop a stale selection (e.g. a workspace that disappeared).
-        setSelectedWorkspaceId((current) =>
-          current && data.some((row) => row.id === current) ? current : "",
-        );
+        // Drop a stale selection (e.g. a workspace that disappeared), or
+        // seed the initial workspace when the user hasn't chosen yet.
+        setSelectedWorkspaceId((current) => {
+          if (current && data.some((row) => row.id === current)) {
+            return current;
+          }
+          if (initialWorkspaceId && data.some((row) => row.id === initialWorkspaceId)) {
+            return initialWorkspaceId;
+          }
+          return "";
+        });
       }
     } catch {
       // Stay graceful: leave the list as-is if the query fails.
     } finally {
       setLoadingWorkspaces(false);
     }
-  }, []);
+  }, [initialWorkspaceId]);
 
   const checkBucket = useCallback(async () => {
     const supabase = getSupabaseBrowserClient();
@@ -445,10 +460,10 @@ export function MaterialsIntakePanel({
           </div>
           <div>
             <h2 className="text-xl font-semibold text-gray-900">
-              Import materials
+              Import documents
             </h2>
             <p className="text-sm text-gray-500 font-light">
-              Upload documents into a workspace — text is extracted
+              Upload source documents into a workspace — text is extracted
               automatically, right after upload.
             </p>
           </div>

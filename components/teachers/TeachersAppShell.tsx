@@ -4,31 +4,42 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  FolderPlus,
+  Files,
   GraduationCap,
-  LayoutDashboard,
-  Library,
   LogOut,
   Menu,
-  UploadCloud,
+  Sparkles,
   X,
 } from "lucide-react";
 import type { TeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
+import { WorkspaceSwitcher } from "@/components/teachers/WorkspaceSwitcher";
+import {
+  WORKSPACE_TABS,
+  type WorkspaceSummary,
+  type WorkspaceTabId,
+} from "@/lib/teachers/fileBrowser";
 
 type TeachersAppShellProps = {
   email: string | null;
   schemaStatus: TeachersSchemaStatus;
   signOutError?: string | null;
   onSignOut: () => void;
+  /** The teacher's own course workspaces, loaded by useCourseWorkspaces. */
+  workspaces: WorkspaceSummary[];
+  workspacesLoading: boolean;
+  currentWorkspaceId: string | null;
+  onSelectWorkspace: (workspaceId: string) => void;
+  onAddWorkspace: () => void;
+  /** Active Documents / Materials tab — the shell mirrors it in the sidebar. */
+  activeTab: WorkspaceTabId;
+  onTabChange: (tab: WorkspaceTabId) => void;
   children: React.ReactNode;
 };
 
-const navItems = [
-  { href: "#overview", label: "Overview", icon: LayoutDashboard },
-  { href: "#workspaces", label: "Workspaces", icon: FolderPlus },
-  { href: "#import", label: "Import", icon: UploadCloud },
-  { href: "#materials", label: "Materials", icon: Library },
-];
+const TAB_ICONS: Record<WorkspaceTabId, typeof Files> = {
+  documents: Files,
+  materials: Sparkles,
+};
 
 function statusLabel(schemaStatus: TeachersSchemaStatus): string {
   if (schemaStatus === "checking") return "Checking";
@@ -42,30 +53,75 @@ function statusLabel(schemaStatus: TeachersSchemaStatus): string {
  * viewport (100dvh) belongs to the app. Desktop gets a sidebar + topbar;
  * mobile collapses the sidebar into a slide-over drawer opened from the
  * topbar. Auth/session handling stays in the page; the shell only receives
- * the signed-in surface (email, sign-out, schema status) plus the page body.
+ * the signed-in surface (email, sign-out, schema status) plus the workspace
+ * selector state (Google Classroom-style, at the top of the sidebar) and
+ * the Documents / Materials tab state, which the sidebar mirrors on both
+ * desktop and mobile.
  */
 export function TeachersAppShell({
   email,
   schemaStatus,
   signOutError,
   onSignOut,
+  workspaces,
+  workspacesLoading,
+  currentWorkspaceId,
+  onSelectWorkspace,
+  onAddWorkspace,
+  activeTab,
+  onTabChange,
   children,
 }: TeachersAppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const renderNav = (closeOnClick: boolean) => (
-    <nav className="flex flex-col gap-1 px-3 py-4" aria-label="Workspace navigation">
-      {navItems.map((item) => (
-        <a
-          key={item.href}
-          href={item.href}
-          onClick={closeOnClick ? () => setDrawerOpen(false) : undefined}
-          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900"
-        >
-          <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-          {item.label}
-        </a>
-      ))}
+  const renderWorkspaceSwitcher = (closeOnClick: boolean) => (
+    <div className="border-b border-gray-100 pb-4">
+      <WorkspaceSwitcher
+        workspaces={workspaces}
+        currentWorkspaceId={currentWorkspaceId}
+        loading={workspacesLoading}
+        schemaStatus={schemaStatus}
+        onSelect={(workspaceId) => {
+          onSelectWorkspace(workspaceId);
+          if (closeOnClick) setDrawerOpen(false);
+        }}
+        onAddWorkspace={() => {
+          onAddWorkspace();
+          if (closeOnClick) setDrawerOpen(false);
+        }}
+      />
+    </div>
+  );
+
+  const renderTabNav = (closeOnClick: boolean) => (
+    <nav className="flex flex-col gap-1 px-3 py-4" aria-label="Library navigation">
+      <p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+        Library
+      </p>
+      {WORKSPACE_TABS.map((tab) => {
+        const Icon = TAB_ICONS[tab.id];
+        const active = tab.id === activeTab;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => {
+              onTabChange(tab.id);
+              if (closeOnClick) setDrawerOpen(false);
+            }}
+            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+              active
+                ? "bg-gray-900 text-white"
+                : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+            }`}
+          >
+            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {tab.label}
+          </button>
+        );
+      })}
     </nav>
   );
 
@@ -138,7 +194,10 @@ export function TeachersAppShell({
       <div className="flex min-h-0 flex-1">
         {/* Desktop sidebar */}
         <aside className="hidden w-60 shrink-0 flex-col border-r border-gray-200 bg-white lg:flex">
-          <div className="flex-1 overflow-y-auto">{renderNav(false)}</div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="px-3 pt-4">{renderWorkspaceSwitcher(false)}</div>
+            {renderTabNav(false)}
+          </div>
           <div className="border-t border-gray-100 p-4">
             <Link
               href="/teachers"
@@ -177,7 +236,10 @@ export function TeachersAppShell({
                   <X className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto">{renderNav(true)}</div>
+              <div className="flex-1 overflow-y-auto">
+                <div className="px-3 pt-4">{renderWorkspaceSwitcher(true)}</div>
+                {renderTabNav(true)}
+              </div>
               <div className="border-t border-gray-100 p-4">
                 <Link
                   href="/teachers"

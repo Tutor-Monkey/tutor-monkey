@@ -6,10 +6,13 @@ import { ArrowRight, Clock3, Inbox, Sparkles } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useTeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
+import { useCourseWorkspaces } from "@/hooks/useCourseWorkspaces";
+import type { WorkspaceTabId } from "@/lib/teachers/fileBrowser";
 import { TeachersAppShell } from "@/components/teachers/TeachersAppShell";
-import { CreateWorkspacePanel } from "@/components/teachers/CreateWorkspacePanel";
-import { MaterialsIntakePanel } from "@/components/teachers/MaterialsIntakePanel";
-import { MaterialLibraryPanel } from "@/components/teachers/MaterialLibraryPanel";
+import { AddWorkspaceDialog } from "@/components/teachers/AddWorkspaceDialog";
+import { WorkspaceTabs } from "@/components/teachers/WorkspaceTabs";
+import { DocumentsView } from "@/components/teachers/DocumentsView";
+import { MaterialsView } from "@/components/teachers/MaterialsView";
 
 type AuthState =
   | { status: "loading" }
@@ -23,8 +26,13 @@ type AuthState =
  * Navigation/Footer), this page renders NO main-site chrome: the whole
  * viewport (100dvh) is the app. The signed-in surface lives inside
  * TeachersAppShell (topbar + sidebar + mobile drawer); the loading and
- * signed-out states are full-screen too. Google auth/session handling and
- * the workspace / material library panels are unchanged.
+ * signed-out states are full-screen too.
+ *
+ * Workspace state is owned here (useCourseWorkspaces) and shared with the
+ * shell: the sidebar workspace selector, the Documents / Materials tabs and
+ * the two file-browser views all switch in place — no page reloads.
+ * Workspace creation happens through AddWorkspaceDialog (replacing the old
+ * CreateWorkspacePanel); the new workspace is selected immediately.
  */
 export default function TeachersDashboardPage() {
   const [authState, setAuthState] = useState<AuthState>({
@@ -32,6 +40,18 @@ export default function TeachersDashboardPage() {
   });
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const schemaStatus = useTeachersSchemaStatus();
+
+  const {
+    workspaces,
+    loading: workspacesLoading,
+    currentWorkspaceId,
+    currentWorkspace,
+    selectWorkspace,
+    refresh: refreshWorkspaces,
+  } = useCourseWorkspaces(schemaStatus);
+
+  const [activeTab, setActiveTab] = useState<WorkspaceTabId>("documents");
+  const [addWorkspaceOpen, setAddWorkspaceOpen] = useState(false);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -125,6 +145,13 @@ export default function TeachersDashboardPage() {
           schemaStatus={schemaStatus}
           signOutError={signOutError}
           onSignOut={() => void handleSignOut()}
+          workspaces={workspaces}
+          workspacesLoading={workspacesLoading}
+          currentWorkspaceId={currentWorkspaceId}
+          onSelectWorkspace={selectWorkspace}
+          onAddWorkspace={() => setAddWorkspaceOpen(true)}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
         >
           {/* Overview header */}
           <section id="overview" className="mb-8 animate-fade-in-up">
@@ -143,27 +170,39 @@ export default function TeachersDashboardPage() {
             )}
           </section>
 
-          {/* Workspace creation + materials intake */}
-          <div className="mb-8 grid gap-6 lg:grid-cols-2">
-            <div id="workspaces" className="min-w-0">
-              <CreateWorkspacePanel
-                schemaStatus={schemaStatus}
-                userId={authState.session.user.id}
-              />
-            </div>
-            <div id="import" className="min-w-0">
-              <MaterialsIntakePanel
-                schemaStatus={schemaStatus}
-                userId={authState.session.user.id}
-              />
-            </div>
-          </div>
+          {/* Documents / Materials tabs */}
+          <WorkspaceTabs activeTab={activeTab} onChange={setActiveTab} />
 
-          {/* Material library: auto-parsed uploads, review + generation */}
-          <div id="materials" className="mb-8 min-w-0">
-            <MaterialLibraryPanel schemaStatus={schemaStatus} />
-          </div>
+          {/* Active file-browser view */}
+          {activeTab === "documents" ? (
+            <DocumentsView
+              schemaStatus={schemaStatus}
+              userId={authState.session.user.id}
+              currentWorkspace={currentWorkspace}
+            />
+          ) : (
+            <MaterialsView
+              schemaStatus={schemaStatus}
+              currentWorkspace={currentWorkspace}
+              onSwitchToDocuments={() => setActiveTab("documents")}
+            />
+          )}
         </TeachersAppShell>
+      )}
+
+      {/* Workspace creation — replaces the old CreateWorkspacePanel surface. */}
+      {authState.status === "signedIn" && (
+        <AddWorkspaceDialog
+          open={addWorkspaceOpen}
+          schemaStatus={schemaStatus}
+          userId={authState.session.user.id}
+          onClose={() => setAddWorkspaceOpen(false)}
+          onCreated={(workspace) => {
+            setAddWorkspaceOpen(false);
+            void refreshWorkspaces();
+            selectWorkspace(workspace.id);
+          }}
+        />
       )}
     </>
   );
