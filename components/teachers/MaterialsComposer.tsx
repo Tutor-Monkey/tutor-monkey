@@ -340,8 +340,14 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
       }
       for (const doc of pendingSources) {
         if (!isReadySourceDoc(doc) && doc.sourceType === "google_drive") {
-          if (!driveToken || !(await hydrateDriveMaterial({ token: driveToken, materialId: doc.id, workspaceId: currentWorkspaceId, supabase }))) {
-            setGenerationError(`Couldn't prepare ${doc.filename} for generation.`);
+          const token = driveToken;
+          if (!token) {
+            setGenerationError(`Couldn't prepare ${doc.filename}: Google Drive authorization is unavailable. Sign out and sign back in, then try again.`);
+            return;
+          }
+          const hydration = await hydrateDriveMaterial({ token, materialId: doc.id, workspaceId: currentWorkspaceId, supabase });
+          if (!hydration.ok) {
+            setGenerationError(`Couldn't prepare ${doc.filename}: ${hydration.error}`);
             return;
           }
         }

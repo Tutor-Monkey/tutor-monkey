@@ -198,6 +198,11 @@ export async function POST(
   let result;
   try {
     result = await extractTextFromBuffer(material.original_filename, buffer);
+    if (material.original_filename.toLowerCase().endsWith(".pdf") && result.text.trim() === "") {
+      throw new UnsupportedFormatError(
+        "This PDF contains no selectable text. It may be scanned or image-only; run OCR or upload a text-based PDF.",
+      );
+    }
   } catch (error) {
     if (!(error instanceof UnsupportedFormatError)) {
       console.error(

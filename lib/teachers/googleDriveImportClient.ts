@@ -101,38 +101,53 @@ async function downloadDriveFile(token: string, metadata: DriveMetadata): Promis
   });
 }
 
-/** Download one explicitly selected/used Drive file into private Storage. */
+async function requestDriveExtraction(materialId: string): Promise<DriveHydrationResult> {
+  try {
+    const response = await fetch(`/api/teachers/materials/${materialId}/extract`, { method: "POST" });
+    if (response.ok || response.status === 409) return { ok: true };
+    const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+    return { ok: false, error: typeof body?.error === "string" ? body.error : `Extraction failed (${response.status}).` };
+  } catch {
+    return { ok: false, error: "The extraction request could not reach the server." };
+  }
+}
+export type DriveHydrationResult = { ok: true } | { ok: false; error: string };
+
 export async function hydrateDriveMaterial(options: {
   token: string;
   materialId: string;
   workspaceId: string;
   supabase: SupabaseClient;
-}): Promise<boolean> {
+}): Promise<DriveHydrationResult> {
   const row = await options.supabase
     .from("materials")
     .select("id, original_filename, storage_path, provenance")
     .eq("id", options.materialId)
     .eq("workspace_id", options.workspaceId)
     .maybeSingle();
-  if (row.error || !row.data) return false;
+  if (row.error || !row.data) return { ok: false, error: "The Drive material record could not be loaded." };
   const provenance = (row.data.provenance ?? {}) as { drive_file_id?: unknown };
-  if (typeof provenance.drive_file_id !== "string") return false;
+  if (typeof provenance.drive_file_id !== "string") return { ok: false, error: "This Drive file is missing its source identifier." };
   if (row.data.storage_path) {
-    const extraction = await fetch(`/api/teachers/materials/${row.data.id}/extract`, { method: "POST" });
-    return extraction.ok || extraction.status === 409;
+    return requestDriveExtraction(row.data.id);
   }
-  const metadata = await getDriveMetadataById(options.token, provenance.drive_file_id);
-  const file = await downloadDriveFile(options.token, metadata);
+  let metadata: DriveMetadata;
+  let file: File;
+  try {
+    metadata = await getDriveMetadataById(options.token, provenance.drive_file_id);
+    file = await downloadDriveFile(options.token, metadata);
+  } catch {
+    return { ok: false, error: "The Drive file could not be downloaded. Check authorization and try again." };
+  }
   const path = buildMaterialObjectPath(options.workspaceId, file.name);
   const upload = await options.supabase.storage.from(TEACHERS_MATERIALS_BUCKET).upload(path, file, { contentType: resolveMaterialMimeType(file), upsert: false, cacheControl: "3600" });
-  if (upload.error) return false;
+  if (upload.error) return { ok: false, error: "The downloaded Drive file could not be stored." };
   const update = await options.supabase.from("materials").update({ storage_path: path, mime_type: resolveMaterialMimeType(file), byte_size: file.size }).eq("id", row.data.id).eq("workspace_id", options.workspaceId);
   if (update.error) {
     await options.supabase.storage.from(TEACHERS_MATERIALS_BUCKET).remove([path]);
-    return false;
+    return { ok: false, error: "The Drive material record could not be updated." };
   }
-  const extraction = await fetch(`/api/teachers/materials/${row.data.id}/extract`, { method: "POST" });
-  return extraction.ok || extraction.status === 409;
+  return requestDriveExtraction(row.data.id);
 }
 
 async function ensureWorkspaceFolderPaths(options: {

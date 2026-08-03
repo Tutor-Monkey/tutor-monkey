@@ -129,12 +129,14 @@ async function extractDocxText(data: Uint8Array): Promise<string> {
 async function extractPdfText(data: Uint8Array): Promise<string> {
   try {
     const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const doc = await getDocument({
+    const documentOptions = {
       data,
+      disableWorker: true,
       useWorkerFetch: false,
       isEvalSupported: false,
       useSystemFonts: true,
-    }).promise;
+    } as unknown as Parameters<typeof getDocument>[0];
+    const doc = await getDocument(documentOptions).promise;
 
     try {
       const parts: string[] = [];
