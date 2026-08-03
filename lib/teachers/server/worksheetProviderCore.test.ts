@@ -12,6 +12,7 @@ import {
   buildWorksheetSystemPrompt,
   buildWorksheetUserPrompt,
   mapHttpError,
+  parseAnthropicCompletion,
   parseChatCompletion,
   parseWorksheetJsonContent,
   resolveAnthropicProviderConfig,
@@ -218,6 +219,24 @@ describe("parseChatCompletion", () => {
       const providerError = error as WorksheetProviderError;
       expect(providerError.code).toBe("INVALID_RESPONSE");
     }
+  });
+});
+
+describe("parseAnthropicCompletion", () => {
+  it("collects text blocks after non-text thinking blocks", () => {
+    const parsed = parseAnthropicCompletion({
+      model: "claude-sonnet-5",
+      stop_reason: "end_turn",
+      content: [
+        { type: "thinking", thinking: "internal reasoning" },
+        { type: "text", text: JSON.stringify({ title: "Quiz" }) },
+      ],
+    });
+    expect(parsed.content).toBe('{"title":"Quiz"}');
+  });
+
+  it("rejects responses that contain no text blocks", () => {
+    expect(() => parseAnthropicCompletion({ content: [{ type: "thinking", thinking: "internal" }] })).toThrowError(WorksheetProviderError);
   });
 });
 

@@ -404,13 +404,18 @@ export function parseAnthropicCompletion(body: unknown): ParsedChatCompletion {
   if (typeof body !== "object" || body === null) {
     throw new WorksheetProviderError("INVALID_RESPONSE", "The worksheet provider returned a response we couldn't read.");
   }
-  const content = (body as Record<string, unknown>).content;
-  const first = Array.isArray(content) ? content[0] : null;
-  const text = first && typeof first === "object" ? (first as Record<string, unknown>).text : null;
-  if (typeof text !== "string" || text.trim() === "") {
+  const record = body as Record<string, unknown>;
+  const content = record.content;
+  const text = Array.isArray(content)
+    ? content
+        .filter((block): block is Record<string, unknown> => typeof block === "object" && block !== null)
+        .map((block) => (typeof block.text === "string" ? block.text : ""))
+        .filter((value) => value.trim() !== "")
+        .join("\n")
+    : "";
+  if (text.trim() === "") {
     throw new WorksheetProviderError("INVALID_RESPONSE", "The worksheet provider returned no usable content.");
   }
-  const record = body as Record<string, unknown>;
   return {
     content: text,
     model: typeof record.model === "string" ? record.model : null,
