@@ -14,6 +14,7 @@ type DriveMetadata = {
   mimeType: string;
   size?: string;
   parents?: string[];
+  folderPath?: string[];
 };
 
 type DriveListResponse = { files?: DriveMetadata[]; nextPageToken?: string };
@@ -49,7 +50,9 @@ async function listSelectedFolder(token: string, folder: GoogleDrivePick): Promi
   const query = encodeURIComponent(`'${folder.id}' in parents and trashed = false`);
   const fields = encodeURIComponent("nextPageToken,files(id,name,mimeType,size,parents)");
   const result = await driveRequest<DriveListResponse>(token, `${DRIVE_API}/files?q=${query}&pageSize=100&fields=${fields}`);
-  return (result.files ?? []).filter((file) => file.mimeType !== DRIVE_FOLDER_MIME);
+  return (result.files ?? [])
+    .filter((file) => file.mimeType !== DRIVE_FOLDER_MIME)
+    .map((file) => ({ ...file, folderPath: [folder.name] }));
 }
 
 async function getMetadata(token: string, pick: GoogleDrivePick): Promise<DriveMetadata> {
@@ -125,6 +128,7 @@ export async function importSelectedDrivePicks(options: {
           drive_file_name: metadata.name,
           drive_mime_type: metadata.mimeType,
           drive_parents: metadata.parents ?? [],
+          folder_path: metadata.folderPath ?? [],
           imported_explicitly: true,
         },
       }).select("id").single();

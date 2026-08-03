@@ -147,7 +147,7 @@ export function DocumentsView({
       const { data, error } = await supabase
         .from("materials")
         .select(
-          "id, source_type, original_filename, byte_size, status, created_at, provenance->extraction->>char_count, provenance->last_error->>message",
+          "id, source_type, original_filename, byte_size, status, created_at, provenance->folder_path, provenance->extraction->>char_count, provenance->last_error->>message",
         )
         .eq("workspace_id", currentWorkspace.id)
         .order("created_at", { ascending: false })
