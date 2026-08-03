@@ -135,10 +135,46 @@ export async function hydrateDriveMaterial(options: {
   return extraction.ok || extraction.status === 409;
 }
 
-/**
- * Import only Picker-explicit files. A selected folder is expanded one level
- * through Drive's `parents` query; TutorMonkey never searches arbitrary Drive.
- */
+async function ensureWorkspaceFolderPaths(options: {
+  workspaceId: string;
+  paths: string[][];
+  supabase: SupabaseClient;
+}): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  const existing = await options.supabase
+    .from("workspace_folders")
+    .select("id, parent_id, name")
+    .eq("workspace_id", options.workspaceId);
+  if (existing.error) return result;
+
+  for (const row of existing.data ?? []) {
+    result.set(`${row.parent_id ?? "root"}/${row.name}`, row.id as string);
+  }
+
+  const paths = Array.from(new Set(options.paths.map((path) => path.filter((segment) => segment.trim() !== "").join("/")).values()))
+    .map((path) => path.split("/"));
+  for (const path of paths) {
+    let parentId: string | null = null;
+    for (const name of path) {
+      const key = `${parentId ?? "root"}/${name}`;
+      let id = result.get(key);
+      if (!id) {
+        const inserted = await options.supabase
+          .from("workspace_folders")
+          .insert({ workspace_id: options.workspaceId, parent_id: parentId, name })
+          .select("id")
+          .single();
+        if (inserted.error || !inserted.data) break;
+        id = inserted.data.id as string;
+        result.set(key, id);
+      }
+      parentId = id;
+    }
+  }
+  return result;
+}
+
+
 export async function importSelectedDrivePicks(options: {
   token: string;
   picks: GoogleDrivePick[];
@@ -162,12 +198,35 @@ export async function importSelectedDrivePicks(options: {
   );
   const outcome: DriveImportOutcome = { imported: [], skipped: [], failed: [] };
 
+  const folderPaths = options.picks
+    .filter((pick) => pick.kind === "folder")
+    .map((pick) => [pick.name]);
+  for (const metadata of unique) {
+    if (metadata.folderPath && metadata.folderPath.length > 0) {
+      for (let index = 1; index <= metadata.folderPath.length; index += 1) {
+        folderPaths.push(metadata.folderPath.slice(0, index));
+      }
+    }
+  }
+  const folderIds = await ensureWorkspaceFolderPaths({ workspaceId: options.workspaceId, paths: folderPaths, supabase: options.supabase });
+  const folderIdForPath = (path: string[] | undefined): string | null => {
+    if (!path || path.length === 0) return null;
+    let parentId: string | null = null;
+    for (const name of path) {
+      const id = folderIds.get(`${parentId ?? "root"}/${name}`);
+      if (!id) return null;
+      parentId = id;
+    }
+    return parentId;
+  };
+
   for (const metadata of unique) {
     if (existingIds.has(metadata.id)) {
       const existingRow = existingRows.find((row) => (row.provenance as { drive_file_id?: unknown } | null)?.drive_file_id === metadata.id);
       const existingProvenance = (existingRow?.provenance ?? {}) as Record<string, unknown>;
-      if (existingRow && metadata.folderPath && metadata.folderPath.length > 0 && JSON.stringify(existingProvenance.folder_path ?? []) !== JSON.stringify(metadata.folderPath)) {
-        await options.supabase.from("materials").update({ provenance: { ...existingProvenance, folder_path: metadata.folderPath } }).eq("id", existingRow.id).eq("workspace_id", options.workspaceId);
+      if (existingRow && metadata.folderPath && metadata.folderPath.length > 0) {
+        const nextProvenance = { ...existingProvenance, folder_path: metadata.folderPath };
+        await options.supabase.from("materials").update({ provenance: nextProvenance, folder_id: folderIdForPath(metadata.folderPath) }).eq("id", existingRow.id).eq("workspace_id", options.workspaceId);
       }
       outcome.skipped.push(metadata.name);
       continue;
@@ -177,6 +236,7 @@ export async function importSelectedDrivePicks(options: {
       const mimeType = driveStorageMime(metadata);
       const inserted = await options.supabase.from("materials").insert({
         workspace_id: options.workspaceId,
+        folder_id: folderIdForPath(metadata.folderPath),
         source_type: "google_drive",
         original_filename: filename,
         storage_path: null,

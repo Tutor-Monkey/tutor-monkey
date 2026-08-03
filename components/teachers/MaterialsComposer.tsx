@@ -159,6 +159,8 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
   const [driveSaving, setDriveSaving] = useState(false);
   const [driveSaved, setDriveSaved] = useState<string | null>(null);
   const [driveError, setDriveError] = useState<string | null>(null);
+  const [pendingSources, setPendingSources] = useState<ComposerSourceDoc[]>([]);
+  const [pendingPrompt, setPendingPrompt] = useState("");
 
   const text = useMemo(() => partsText(parts), [parts]);
   const mention = useMemo(() => findMentionAtCaret(text, caret), [text, caret]);
@@ -198,6 +200,39 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
     return () => controller.abort();
   }, [currentWorkspaceId, mention.active, mention.query]);
 
+  async function handleSourceDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const documentPayload = event.dataTransfer.getData("application/x-tutormonkey-document");
+    const folderPayload = event.dataTransfer.getData("application/x-tutormonkey-folder");
+    let dropped: ComposerSourceDoc[] = [];
+    if (documentPayload) {
+      try {
+        const entry = JSON.parse(documentPayload) as { id: string; name: string; sourceType: string; status: string; createdAt: string; mimeType?: string | null; folderSegments?: string[] };
+        dropped = [{ id: entry.id, filename: entry.name, sourceType: entry.sourceType, mimeType: entry.mimeType ?? null, status: entry.status as ComposerSourceDoc["status"], createdAt: entry.createdAt, folderSegments: entry.folderSegments ?? [] }];
+      } catch { return; }
+    } else if (folderPayload) {
+      try {
+        const folder = JSON.parse(folderPayload) as { path: string[] };
+        const result = await fetchWorkspaceSuggestions(currentWorkspaceId, "", 100);
+        if (result.ok) dropped = result.candidates.filter((doc) => folder.path.every((segment, index) => doc.folderSegments[index] === segment));
+      } catch { return; }
+    }
+    const usable = dropped.filter(canUseSource);
+    if (usable.length === 0) return;
+    const nextDocs = [...docs, ...usable.filter((doc) => !docs.some((item) => item.id === doc.id))];
+    const nextParts = normalizeParts([...parts, ...usable.flatMap((doc) => [{ kind: "mention" as const, doc }, { kind: "text" as const, value: " " }])]);
+    setDocs(nextDocs);
+    setParts(nextParts);
+    if (pendingPrompt) setPendingSources((current) => [...current, ...usable.filter((doc) => !current.some((item) => item.id === doc.id))]);
+    requestAnimationFrame(() => {
+      if (!editorRef.current) return;
+      editorRef.current.innerHTML = "";
+      nextParts.forEach((part, index) => editorRef.current?.appendChild(renderDomPart(part, index)));
+      placeCaretAtEnd(editorRef.current);
+      setCaret(partsText(nextParts).length);
+    });
+  }
+
   function syncEditor() {
     if (!editorRef.current) return;
     const nextParts = readParts(editorRef.current, docs);
@@ -208,6 +243,7 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
   function selectSuggestion(doc: ComposerSourceDoc) {
     const nextParts = replaceMention(parts, mention.start, mention.end, doc);
     setDocs((current) => current.some((item) => item.id === doc.id) ? current : [...current, doc]);
+    if (pendingPrompt) setPendingSources((current) => current.some((item) => item.id === doc.id) ? current : [...current, doc]);
     setParts(nextParts);
     setSuggestions([]);
     setMenuOpen(false);
@@ -249,7 +285,7 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
   }
 
   async function prepareGeneration() {
-    if (generating) return;
+    if (generating || pendingPrompt) return;
     const prompt = text.trim();
     if (!prompt || prompt.length > MAX_TEACHER_PROMPT_CHARS) return;
     setGenerating(true);
@@ -269,13 +305,25 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
         setGenerationError("No usable source documents were found in this workspace.");
         return;
       }
+      setPendingPrompt(prompt);
+      setPendingSources(candidates);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function confirmGeneration() {
+    if (generating || !pendingPrompt || pendingSources.length === 0) return;
+    setGenerating(true);
+    setGenerationError(null);
+    try {
       const driveToken = await readGoogleProviderToken();
       const supabase = getSupabaseBrowserClient();
       if (!supabase) {
         setGenerationError("The workspace connection is unavailable — please refresh and try again.");
         return;
       }
-      for (const doc of candidates) {
+      for (const doc of pendingSources) {
         if (!isReadySourceDoc(doc) && doc.sourceType === "google_drive") {
           if (!driveToken || !(await hydrateDriveMaterial({ token: driveToken, materialId: doc.id, workspaceId: currentWorkspaceId, supabase }))) {
             setGenerationError(`Couldn't prepare ${doc.filename} for generation.`);
@@ -283,9 +331,9 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
           }
         }
       }
-      const materialIds = Array.from(new Set(candidates.map((doc) => doc.id)));
+      const materialIds = Array.from(new Set(pendingSources.map((doc) => doc.id)));
       const outcome = await requestWorkspaceGeneration(currentWorkspaceId, {
-        prompt,
+        prompt: pendingPrompt,
         materialIds,
         confirmedMaterialIds: materialIds,
       });
@@ -295,6 +343,8 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
       }
       setGenerated(outcome.material);
       onGenerated(outcome.material);
+      setPendingSources([]);
+      setPendingPrompt("");
       setParts(emptyParts);
       if (editorRef.current) editorRef.current.innerHTML = "";
     } finally {
@@ -389,13 +439,15 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
               data-placeholder="Ask TutorMonkey to create a material…"
               suppressContentEditableWarning
               onInput={syncEditor}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => void handleSourceDrop(event)}
               onKeyDown={handleKeyDown}
               onKeyUp={() => editorRef.current && setCaret(caretOffset(editorRef.current))}
               onClick={() => editorRef.current && setCaret(caretOffset(editorRef.current))}
               className="min-h-12 max-h-40 flex-1 overflow-y-auto whitespace-pre-wrap px-1 py-2 text-base leading-6 text-gray-900 outline-none empty:before:text-gray-400 empty:before:content-[attr(data-placeholder)]"
             >
             </div>
-            <button type="button" aria-label="Generate material" onClick={() => void prepareGeneration()} disabled={generating || text.trim() === ""} className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400">
+            <button type="button" aria-label="Generate material" onClick={() => void prepareGeneration()} disabled={generating || Boolean(pendingPrompt) || text.trim() === ""} className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400">
               {generating ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowUp className="h-5 w-5" />}
             </button>
           </div>
@@ -405,6 +457,32 @@ export function MaterialsComposer({ currentWorkspaceId, onGenerated }: Materials
           </div>
         </div>
       </div>
+      {pendingPrompt && (
+        <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-indigo-950">Review source documents</p>
+              <p className="mt-1 text-xs text-indigo-900/70">TutorMonkey selected these sources. Remove any, or add a document with @ before confirming.</p>
+            </div>
+            <button type="button" onClick={() => { setPendingPrompt(""); setPendingSources([]); }} className="text-xs font-medium text-indigo-700 hover:text-indigo-950">Cancel</button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {pendingSources.map((doc) => (
+              <span key={doc.id} className="inline-flex max-w-full items-center gap-1 rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-xs text-indigo-900">
+                <FileText className="h-3 w-3 shrink-0" />
+                <span className="max-w-[18rem] truncate">{doc.filename}</span>
+                <button type="button" aria-label={`Remove ${doc.filename}`} onClick={() => setPendingSources((current) => current.filter((item) => item.id !== doc.id))} className="rounded-full p-0.5 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-900">×</button>
+              </span>
+            ))}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button type="button" onClick={() => void confirmGeneration()} disabled={generating || pendingSources.length === 0} className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-xs font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50">
+              {generating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {generating ? "Preparing sources…" : "Confirm and generate"}
+            </button>
+          </div>
+        </div>
+      )}
       {generating && (
         <div role="status" aria-live="polite" className="mt-4 flex items-center gap-2 text-sm text-gray-500">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

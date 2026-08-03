@@ -87,6 +87,7 @@ export function DocumentsView({
   const [folderSegments, setFolderSegments] = useState<string[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [rows, setRows] = useState<DocumentRow[]>([]);
+  const [workspaceFolderPaths, setWorkspaceFolderPaths] = useState<string[][]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   /** Drive import gate lifted from GoogleDriveImportButton (null = checking). */
@@ -167,6 +168,32 @@ export function DocumentsView({
           })),
         );
       }
+      const folderQuery = await supabase
+        .from("workspace_folders")
+        .select("id, parent_id, name")
+        .eq("workspace_id", currentWorkspace.id)
+        .order("name", { ascending: true });
+      if (!folderQuery.error) {
+        const byId = new Map<string, { name: string; parent_id: string | null }>();
+        for (const folder of folderQuery.data ?? []) byId.set(folder.id as string, { name: folder.name as string, parent_id: folder.parent_id as string | null });
+        const paths = (folderQuery.data ?? []).map((folder) => {
+          const path: string[] = [];
+          const visited = new Set<string>();
+          let current = folder.id as string;
+          while (!visited.has(current)) {
+            visited.add(current);
+            const item = byId.get(current);
+            if (!item) break;
+            path.unshift(item.name);
+            if (!item.parent_id) break;
+            current = item.parent_id;
+          }
+          return path;
+        }).filter((path) => path.length > 0);
+        setWorkspaceFolderPaths(paths);
+      } else {
+        setWorkspaceFolderPaths([]);
+      }
     } catch {
       setLoadError("Couldn't load this workspace's documents — please refresh.");
     } finally {
@@ -179,6 +206,7 @@ export function DocumentsView({
       void loadDocuments();
     } else {
       setRows([]);
+    setWorkspaceFolderPaths([]);
     }
   }, [isReady, currentWorkspace, loadDocuments]);
 
@@ -216,7 +244,7 @@ export function DocumentsView({
   const contents = useMemo(() => {
     const base = groupFolderContents(entries, folderSegments);
     const folders = [...base.folders];
-    for (const path of driveFolderPaths) {
+    for (const path of [...workspaceFolderPaths, ...driveFolderPaths]) {
       if (path.length <= folderSegments.length || !folderSegments.every((segment, index) => path[index] === segment)) continue;
       const childPath = path.slice(0, folderSegments.length + 1);
       if (!folders.some((folder) => folderPathKey(folder.path) === folderPathKey(childPath))) {
@@ -225,7 +253,7 @@ export function DocumentsView({
     }
     folders.sort((a, b) => a.name.localeCompare(b.name));
     return { folders, files: base.files };
-  }, [entries, folderSegments, driveFolderPaths]);
+  }, [entries, folderSegments, workspaceFolderPaths, driveFolderPaths]);
 
   const emptyFolder =
     !loading && !loadError && contents.folders.length === 0 && contents.files.length === 0;
@@ -405,6 +433,8 @@ export function DocumentsView({
                       type="button"
                       onClick={() => setFolderSegments(folder.path)}
                       className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 text-left transition-colors hover:border-gray-300 hover:bg-gray-100"
+                      draggable
+                      onDragStart={(event) => event.dataTransfer.setData("application/x-tutormonkey-folder", JSON.stringify({ name: folder.name, path: folder.path }))}
                     >
                       <Folder
                         className="h-5 w-5 shrink-0 text-amber-500"
@@ -433,7 +463,9 @@ export function DocumentsView({
                   return (
                     <li
                       key={entry.id}
-                      className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
+                      draggable
+                      onDragStart={(event) => event.dataTransfer.setData("application/x-tutormonkey-document", JSON.stringify(entry))}
+                      className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3 transition-colors hover:border-gray-300 hover:bg-gray-100 sm:flex-row sm:items-start sm:justify-between"
                     >
                       <div className="flex min-w-0 items-start gap-3">
                         <FileText

@@ -33,6 +33,8 @@ type TeachersAppShellProps = {
   /** Active Documents / Materials tab — the shell mirrors it in the sidebar. */
   activeTab: WorkspaceTabId;
   onTabChange: (tab: WorkspaceTabId) => void;
+  /** Documents explorer rendered in the VS Code-like left pane. */
+  leftPane?: React.ReactNode;
   children: React.ReactNode;
 };
 
@@ -70,6 +72,7 @@ export function TeachersAppShell({
   onAddWorkspace,
   activeTab,
   onTabChange,
+  leftPane,
   children,
 }: TeachersAppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -193,10 +196,10 @@ export function TeachersAppShell({
 
       <div className="flex min-h-0 flex-1">
         {/* Desktop sidebar */}
-        <aside className="hidden w-60 shrink-0 flex-col border-r border-gray-200 bg-white lg:flex">
-          <div className="flex-1 overflow-y-auto">
-            <div className="px-3 pt-4">{renderWorkspaceSwitcher(false)}</div>
-            {renderTabNav(false)}
+        <aside className="hidden w-[22rem] shrink-0 flex-col border-r border-gray-200 bg-white lg:flex">
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="border-b border-gray-100 px-3 pt-4">{renderWorkspaceSwitcher(false)}</div>
+            {leftPane ?? renderTabNav(false)}
           </div>
           <div className="border-t border-gray-100 p-4">
             <Link
@@ -238,7 +241,7 @@ export function TeachersAppShell({
               </div>
               <div className="flex-1 overflow-y-auto">
                 <div className="px-3 pt-4">{renderWorkspaceSwitcher(true)}</div>
-                {renderTabNav(true)}
+                {leftPane ?? renderTabNav(true)}
               </div>
               <div className="border-t border-gray-100 p-4">
                 <Link

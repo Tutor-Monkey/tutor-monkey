@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Clock3, FolderPlus, Inbox, Sparkles } from "lucide-react";
+import { ArrowRight, Clock3, FolderPlus, Inbox } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useTeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
@@ -10,7 +10,6 @@ import { useCourseWorkspaces } from "@/hooks/useCourseWorkspaces";
 import type { WorkspaceTabId } from "@/lib/teachers/fileBrowser";
 import { TeachersAppShell } from "@/components/teachers/TeachersAppShell";
 import { AddWorkspaceDialog } from "@/components/teachers/AddWorkspaceDialog";
-import { WorkspaceTabs } from "@/components/teachers/WorkspaceTabs";
 import { DocumentsView } from "@/components/teachers/DocumentsView";
 import { MaterialsView } from "@/components/teachers/MaterialsView";
 
@@ -191,41 +190,19 @@ export default function TeachersDashboardPage() {
           onAddWorkspace={() => setAddWorkspaceOpen(true)}
           activeTab={activeTab}
           onTabChange={setActiveTab}
-        >
-          {/* Overview header */}
-          <section id="overview" className="mb-8 animate-fade-in-up">
-            <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-1.5 text-sm font-medium text-gray-600">
-              <Sparkles className="h-4 w-4 text-gray-500" aria-hidden="true" />
-              TutorMonkey Teachers · Dashboard
-            </p>
-            <h1 className="mb-3 font-display text-3xl font-light text-balance text-gray-900 md:text-4xl">
-              Welcome back{email ? `, ${email.split("@")[0]}` : ""}
-            </h1>
-            {email && (
-              <p className="text-base font-light text-gray-600">
-                Signed in as{" "}
-                <span className="font-medium text-gray-900">{email}</span>
-              </p>
-            )}
-          </section>
-
-          {/* Documents / Materials tabs */}
-          <WorkspaceTabs activeTab={activeTab} onChange={setActiveTab} />
-
-          {/* Active file-browser view */}
-          {activeTab === "documents" ? (
+          leftPane={
             <DocumentsView
               schemaStatus={schemaStatus}
               userId={authState.session.user.id}
               currentWorkspace={currentWorkspace}
             />
-          ) : (
-            <MaterialsView
-              schemaStatus={schemaStatus}
-              currentWorkspace={currentWorkspace}
-              onSwitchToDocuments={() => setActiveTab("documents")}
-            />
-          )}
+          }
+        >
+          <MaterialsView
+            schemaStatus={schemaStatus}
+            currentWorkspace={currentWorkspace}
+            onSwitchToDocuments={() => undefined}
+          />
         </TeachersAppShell>
       )}
 
