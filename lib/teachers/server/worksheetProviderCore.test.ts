@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEEPSEEK_BASE_URL,
   DEFAULT_MAX_TOKENS,
+  DEFAULT_MODEL,
   WORKSHEET_PROVIDER_NAME,
   WorksheetProviderError,
   buildChatCompletionsPayload,
@@ -13,131 +15,98 @@ import {
 } from "./worksheetProviderCore";
 
 const validEnv = {
-  OPENCODE_BASE_URL: "https://opencode.example.com/v1",
-  OPENCODE_MODEL: "opencode-worksheet-v1",
-  OPENCODE_API_KEY: "test-key-123",
+  DEEPSEEK_API_KEY: "test-key-123",
 };
 
 describe("resolveProviderConfig", () => {
-  it("resolves a fully configured env", () => {
+  it("resolves the fixed DeepSeek base URL and default model from just the key", () => {
     const config = resolveProviderConfig(validEnv);
     expect(config).toEqual({
-      baseUrl: "https://opencode.example.com/v1",
-      model: "opencode-worksheet-v1",
+      baseUrl: DEEPSEEK_BASE_URL,
+      model: DEFAULT_MODEL,
       apiKey: "test-key-123",
     });
   });
 
-  it("trims whitespace around baseUrl and model", () => {
+  it("uses the official DeepSeek base URL, never a configured one", () => {
     const config = resolveProviderConfig({
       ...validEnv,
-      OPENCODE_BASE_URL: "  https://opencode.example.com/v1  ",
-      OPENCODE_MODEL: "  opencode-worksheet-v1  ",
+      // A stray base-url var must be ignored: the endpoint is fixed.
+      SOME_BASE_URL: "https://evil.example.com",
     });
-    expect(config.baseUrl).toBe("https://opencode.example.com/v1");
-    expect(config.model).toBe("opencode-worksheet-v1");
+    expect(config.baseUrl).toBe(DEEPSEEK_BASE_URL);
   });
 
-  it("fails with MISSING_CONFIGURATION when OPENCODE_BASE_URL is absent", () => {
-    expect(() =>
-      resolveProviderConfig({ OPENCODE_MODEL: "m", OPENCODE_API_KEY: "k" }),
-    ).toThrowError(WorksheetProviderError);
+  it("honors an optional DEEPSEEK_MODEL override, trimmed", () => {
+    const config = resolveProviderConfig({
+      ...validEnv,
+      DEEPSEEK_MODEL: "  deepseek-v4-pro  ",
+    });
+    expect(config.model).toBe("deepseek-v4-pro");
+  });
+
+  it("falls back to the default model when DEEPSEEK_MODEL is blank", () => {
+    expect(resolveProviderConfig({ ...validEnv, DEEPSEEK_MODEL: "   " }).model).toBe(
+      DEFAULT_MODEL,
+    );
+  });
+
+  it("fails with MISSING_API_KEY when DEEPSEEK_API_KEY is absent", () => {
     try {
-      resolveProviderConfig({ OPENCODE_MODEL: "m", OPENCODE_API_KEY: "k" });
+      resolveProviderConfig({});
     } catch (error) {
       expect(error).toBeInstanceOf(WorksheetProviderError);
       const providerError = error as WorksheetProviderError;
-      expect(providerError.code).toBe("MISSING_CONFIGURATION");
-      expect(providerError.message).toContain("OPENCODE_BASE_URL");
-      expect(providerError.message).not.toContain("deepseek-key");
-    }
-  });
-
-  it("fails when OPENCODE_BASE_URL is blank or not an http(s) URL", () => {
-    expect(() =>
-      resolveProviderConfig({ ...validEnv, OPENCODE_BASE_URL: "   " }),
-    ).toThrowError(WorksheetProviderError);
-    expect(() =>
-      resolveProviderConfig({
-        ...validEnv,
-        OPENCODE_BASE_URL: "opencode.example.com/v1",
-      }),
-    ).toThrowError(WorksheetProviderError);
-    expect(() =>
-      resolveProviderConfig({ ...validEnv, OPENCODE_BASE_URL: "ftp://x" }),
-    ).toThrowError(WorksheetProviderError);
-  });
-
-  it("fails with MISSING_CONFIGURATION when OPENCODE_MODEL is absent", () => {
-    try {
-      resolveProviderConfig({
-        OPENCODE_BASE_URL: "https://opencode.example.com/v1",
-        OPENCODE_API_KEY: "k",
-      });
-    } catch (error) {
-      const providerError = error as WorksheetProviderError;
-      expect(providerError.code).toBe("MISSING_CONFIGURATION");
-      expect(providerError.message).toContain("OPENCODE_MODEL");
-    }
-  });
-
-  it("fails with MISSING_API_KEY when OPENCODE_API_KEY is absent or blank", () => {
-    try {
-      resolveProviderConfig({
-        OPENCODE_BASE_URL: "https://opencode.example.com/v1",
-        OPENCODE_MODEL: "m",
-      });
-    } catch (error) {
-      const providerError = error as WorksheetProviderError;
       expect(providerError.code).toBe("MISSING_API_KEY");
-      expect(providerError.message).toContain("OPENCODE_API_KEY");
+      expect(providerError.message).toContain("DEEPSEEK_API_KEY");
+      expect(providerError.message).not.toContain("test-key");
     }
+  });
+
+  it("fails with MISSING_API_KEY when DEEPSEEK_API_KEY is blank", () => {
     expect(() =>
-      resolveProviderConfig({ ...validEnv, OPENCODE_API_KEY: "   " }),
+      resolveProviderConfig({ DEEPSEEK_API_KEY: "   " }),
     ).toThrowError(WorksheetProviderError);
   });
 
-  it("never falls back to DEEPSEEK_API_KEY or any other env name", () => {
+  it("never falls back to any other env key name", () => {
     const env = {
-      OPENCODE_BASE_URL: "https://opencode.example.com/v1",
-      OPENCODE_MODEL: "m",
-      DEEPSEEK_API_KEY: "deepseek-key",
       OPENAI_API_KEY: "openai-key",
+      ANTHROPIC_API_KEY: "anthropic-key",
+      DEEPSEEK_MODEL: "deepseek-v4-flash",
     };
-    expect(() => resolveProviderConfig(env)).toThrowError(
-      /OPENCODE_API_KEY/,
-    );
+    expect(() => resolveProviderConfig(env)).toThrowError(/DEEPSEEK_API_KEY/);
   });
 });
 
 describe("buildChatCompletionsUrl", () => {
-  it("appends /chat/completions to a v1-style base", () => {
-    expect(buildChatCompletionsUrl("https://opencode.example.com/v1")).toBe(
-      "https://opencode.example.com/v1/chat/completions",
+  it("appends /chat/completions to the DeepSeek base URL", () => {
+    expect(buildChatCompletionsUrl(DEEPSEEK_BASE_URL)).toBe(
+      "https://api.deepseek.com/chat/completions",
     );
   });
 
   it("normalizes a trailing slash", () => {
-    expect(
-      buildChatCompletionsUrl("https://opencode.example.com/v1/"),
-    ).toBe("https://opencode.example.com/v1/chat/completions");
+    expect(buildChatCompletionsUrl("https://api.deepseek.com/")).toBe(
+      "https://api.deepseek.com/chat/completions",
+    );
   });
 
   it("uses an already-full endpoint as-is", () => {
     expect(
-      buildChatCompletionsUrl("https://opencode.example.com/v1/chat/completions"),
-    ).toBe("https://opencode.example.com/v1/chat/completions");
+      buildChatCompletionsUrl("https://api.deepseek.com/chat/completions"),
+    ).toBe("https://api.deepseek.com/chat/completions");
   });
 });
 
 describe("buildChatCompletionsPayload", () => {
-  it("builds the OpenAI-style request body with defaults", () => {
+  it("builds the OpenAI-style request body with the default model", () => {
     const payload = buildChatCompletionsPayload({
-      model: "opencode-worksheet-v1",
+      model: DEFAULT_MODEL,
       systemPrompt: "system",
       userPrompt: "user",
     });
-    expect(payload.model).toBe("opencode-worksheet-v1");
+    expect(payload.model).toBe(DEFAULT_MODEL);
     expect(payload.messages).toEqual([
       { role: "system", content: "system" },
       { role: "user", content: "user" },
@@ -180,7 +149,7 @@ describe("parseChatCompletion", () => {
   it("parses a valid OpenAI-style success body", () => {
     const parsed = parseChatCompletion({
       id: "cmpl-1",
-      model: "opencode-worksheet-v1",
+      model: DEFAULT_MODEL,
       choices: [
         {
           index: 0,
@@ -190,7 +159,7 @@ describe("parseChatCompletion", () => {
       ],
     });
     expect(parsed.content).toBe('{"title":"T"}');
-    expect(parsed.model).toBe("opencode-worksheet-v1");
+    expect(parsed.model).toBe(DEFAULT_MODEL);
     expect(parsed.finishReason).toBe("stop");
   });
 
@@ -237,7 +206,7 @@ describe("mapHttpError", () => {
     const unauthorized = mapHttpError(401);
     expect(unauthorized.code).toBe("UPSTREAM_ERROR");
     expect(unauthorized.status).toBe(401);
-    expect(unauthorized.message).toContain("OPENCODE_API_KEY");
+    expect(unauthorized.message).toContain("DEEPSEEK_API_KEY");
 
     expect(mapHttpError(402).code).toBe("UPSTREAM_ERROR");
   });
@@ -258,11 +227,12 @@ describe("mapHttpError", () => {
     const message = mapHttpError(401).message;
     expect(message).not.toContain("sk-");
     expect(message).not.toContain("test-key");
+    expect(message).not.toContain("deepseek-key");
   });
 });
 
 describe("WORKSHEET_PROVIDER_NAME", () => {
   it("labels the provider for provenance", () => {
-    expect(WORKSHEET_PROVIDER_NAME).toBe("opencode");
+    expect(WORKSHEET_PROVIDER_NAME).toBe("deepseek");
   });
 });

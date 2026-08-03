@@ -2,19 +2,20 @@
  * TutorMonkey Teachers — worksheet generation provider orchestration.
  *
  * Server-only module (imported by the generate route handler; never imported
- * from client components). Reads OPENCODE_BASE_URL, OPENCODE_MODEL and
- * OPENCODE_API_KEY from the server env, calls the OpenCode-compatible
- * OpenAI-style chat.completions endpoint with strict JSON output, bounds the
- * request with a hard timeout, and returns ONLY a worksheet that passed
+ * from client components). Reads DEEPSEEK_API_KEY from the server env, calls
+ * the DeepSeek OpenAI-compatible chat.completions endpoint at the fixed base
+ * URL https://api.deepseek.com with strict JSON output, bounds the request
+ * with a hard timeout, and returns ONLY a worksheet that passed
  * validateWorksheet (lib/teachers/worksheet.ts).
  *
  * Security:
- *   - OPENCODE_API_KEY is read here, server-side, and never exposed to the
- *     browser. DEEPSEEK_API_KEY and coding-agent keys are never read — this
- *     runtime talks only to the configured OpenCode-compatible endpoint.
- *   - Missing/invalid configuration (base URL, model, key) fails with a
- *     clear WorksheetProviderError (MISSING_CONFIGURATION / MISSING_API_KEY)
- *     that the route maps to a 503. We never guess a base URL.
+ *   - DEEPSEEK_API_KEY is read here, server-side, and never exposed to the
+ *     browser. No other key (OpenAI, coding agents, etc.) is ever read.
+ *   - Missing configuration (the API key) fails with a clear
+ *     WorksheetProviderError (MISSING_API_KEY) that the route maps to a 503.
+ *     The base URL is fixed to https://api.deepseek.com and the model
+ *     defaults to deepseek-v4-flash (optional DEEPSEEK_MODEL override) — we
+ *     never guess an endpoint.
  *   - The full source material is only ever placed inside the request body.
  *     Nothing in this module logs the key, the payload, or the source text —
  *     error messages carry codes/status only.

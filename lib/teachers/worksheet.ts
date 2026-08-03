@@ -16,8 +16,10 @@
  * reusing the existing materials table + RLS rather than adding a migration.
  *
  * The provider it feeds (lib/teachers/server/worksheetProvider.ts) talks to
- * an OpenCode-compatible, OpenAI-style endpoint configured by OPENCODE_BASE_URL
- * and OPENCODE_MODEL; it never uses DEEPSEEK_API_KEY or any coding-agent key.
+ * the DeepSeek API — an OpenAI-compatible chat.completions endpoint at the
+ * fixed base URL https://api.deepseek.com — using the server-only
+ * DEEPSEEK_API_KEY and the default model deepseek-v4-flash (optional
+ * DEEPSEEK_MODEL override).
  */
 
 /** A single worksheet question in the canonical stored shape. */

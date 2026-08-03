@@ -37,8 +37,8 @@ function json(body: Record<string, unknown>, status: number) {
  *
  * First worksheet-generation slice: takes a material whose text was already
  * extracted (materials.provenance.extraction.text), sends the bounded text to
- * the configured OpenCode-compatible provider, validates the returned
- * worksheet, and persists it.
+ * the DeepSeek API (OpenAI-compatible chat.completions endpoint at
+ * https://api.deepseek.com), validates the returned worksheet, and persists it.
  *
  * Flow (mirrors the extract route's discipline):
  *   1. SSR Supabase client resolves the session from cookies; no session → 401.
@@ -59,7 +59,7 @@ function json(body: Record<string, unknown>, status: number) {
  *      failed and provenance.worksheet.last_error records the honest message;
  *      the route never claims success before validation + persistence.
  *
- * Security: OPENCODE_API_KEY is read server-side only; nothing here (or in
+ * Security: DEEPSEEK_API_KEY is read server-side only; nothing here (or in
  * the provider) ever logs the key or the full source text.
  */
 export async function POST(

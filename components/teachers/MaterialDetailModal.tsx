@@ -618,8 +618,8 @@ export function MaterialDetailModal({
           <p className="flex items-start gap-1.5 text-xs text-gray-500 font-light">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true" />
             Text is read on the server through your session. Worksheet generation
-            runs on the server through the configured OpenCode-compatible
-            provider and never exposes its key to the browser.
+            runs on the server through the configured DeepSeek provider and
+            never exposes its key to the browser.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             {extractError && (
@@ -765,7 +765,7 @@ function WorksheetPreview({
       {generatedAt && (
         <p className="text-xs text-gray-400 font-light">
           Generated {shortDate(generatedAt) || "recently"} with server-side
-          OpenCode-compatible processing.
+          DeepSeek processing.
         </p>
       )}
     </div>

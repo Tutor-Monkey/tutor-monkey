@@ -300,8 +300,8 @@ describe("describeGenerationState", () => {
               },
             ],
           },
-          provider: "opencode",
-          model: "opencode-worksheet-v1",
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
           generated_at: "2026-08-02T12:00:00.000Z",
           truncated_source: true,
         },
@@ -311,7 +311,7 @@ describe("describeGenerationState", () => {
     if (state.kind !== "generated") return;
     expect(state.worksheet.title).toBe("Review");
     expect(state.generatedAt).toBe("2026-08-02T12:00:00.000Z");
-    expect(state.model).toBe("opencode-worksheet-v1");
+    expect(state.model).toBe("deepseek-v4-flash");
     expect(state.truncatedSource).toBe(true);
   });
 
@@ -325,7 +325,7 @@ describe("describeGenerationState", () => {
           last_error: {
             stage: "generate",
             message:
-              "Worksheet generation isn't configured yet — the developer needs to set OPENCODE_BASE_URL in the server environment.",
+              "Worksheet generation isn't configured yet — the developer needs to add DEEPSEEK_API_KEY to the server environment.",
             at: "2026-08-02T12:00:00.000Z",
           },
         },
@@ -333,7 +333,7 @@ describe("describeGenerationState", () => {
     });
     expect(state.kind).toBe("failed");
     if (state.kind !== "failed") return;
-    expect(state.message).toContain("OPENCODE_BASE_URL");
+    expect(state.message).toContain("DEEPSEEK_API_KEY");
   });
 
   it("is unavailable when no extracted text is saved", () => {

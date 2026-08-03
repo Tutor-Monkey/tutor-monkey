@@ -8,17 +8,17 @@
  * (lib/teachers/server/worksheetProvider.ts) passes `process.env` and owns
  * the fetch call.
  *
- * The runtime talks to an OpenCode-compatible, OpenAI-style chat.completions
- * endpoint configured by exactly three server env vars:
- *   OPENCODE_BASE_URL — e.g. "https://opencode.example.com/v1" (required)
- *   OPENCODE_MODEL    — the model name that endpoint serves        (required)
- *   OPENCODE_API_KEY  — bearer key, read server-side only          (required)
+ * The runtime talks to the DeepSeek API — an OpenAI-compatible
+ * chat.completions endpoint — at the fixed base URL https://api.deepseek.com,
+ * authenticated with exactly one server env var:
+ *   DEEPSEEK_API_KEY — bearer key, read server-side only (required)
  *
- * No default base URL or model is invented: if any of these is missing or
- * invalid, the provider fails with a clear WorksheetProviderError
- * (MISSING_CONFIGURATION / MISSING_API_KEY) that the route maps to a 503 —
- * we never guess an endpoint, and we never fall back to any other key
- * (DEEPSEEK_API_KEY and coding-agent keys are not used here at all).
+ * The model defaults to deepseek-v4-flash and may be overridden with the
+ * optional DEEPSEEK_MODEL env var (trimmed; blank falls back to the default).
+ * No other base URL or model is ever guessed: if the key is missing the
+ * provider fails with a clear WorksheetProviderError (MISSING_API_KEY) that
+ * the route maps to a 503 — we never fall back to any other key
+ * (OPENAI_API_KEY, coding-agent keys, etc. are not used here at all).
  *
  * Security notes (kept true by the orchestration layer too):
  *   - The API key is read server-side only, never in browser code.
@@ -28,7 +28,13 @@
  */
 
 /** Provider label persisted to provenance and returned to the UI. */
-export const WORKSHEET_PROVIDER_NAME = "opencode";
+export const WORKSHEET_PROVIDER_NAME = "deepseek";
+
+/** Fixed DeepSeek API base URL (official docs; OpenAI-compatible). */
+export const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+
+/** Default worksheet model; DEEPSEEK_MODEL may override it. */
+export const DEFAULT_MODEL = "deepseek-v4-flash";
 
 /** Bounded completion budget for a worksheet (tokens). */
 export const DEFAULT_MAX_TOKENS = 8_000;
@@ -78,56 +84,30 @@ export type ResolvedProviderConfig = {
  * Pure: the caller decides where the values come from (process.env in the
  * route, explicit objects in tests).
  *
- * Missing or invalid values throw a typed error with configuration guidance
- * (the env var name, never a value). We deliberately have NO default base
- * URL or model — guessing an endpoint is worse than failing loudly.
+ * The base URL is fixed (https://api.deepseek.com) and the model defaults to
+ * deepseek-v4-flash, so the only required value is DEEPSEEK_API_KEY. Missing
+ * or blank values throw a typed error with configuration guidance (the env
+ * var name, never a value). The optional DEEPSEEK_MODEL override is trimmed
+ * and falls back to the default when blank.
  */
 export function resolveProviderConfig(env: ProviderEnv): ResolvedProviderConfig {
-  const baseUrl = env.OPENCODE_BASE_URL;
-  if (!baseUrl || baseUrl.trim() === "") {
-    throw new WorksheetProviderError(
-      "MISSING_CONFIGURATION",
-      "Worksheet generation isn't configured yet — the developer needs to set OPENCODE_BASE_URL in the server environment (an OpenCode-compatible, OpenAI-style endpoint, e.g. https://opencode.example.com/v1).",
-    );
-  }
-  const trimmedBaseUrl = baseUrl.trim();
-  if (!isHttpUrl(trimmedBaseUrl)) {
-    throw new WorksheetProviderError(
-      "MISSING_CONFIGURATION",
-      "Worksheet generation isn't configured yet — OPENCODE_BASE_URL must be a valid http(s) URL like https://opencode.example.com/v1.",
-    );
-  }
-
-  const model = env.OPENCODE_MODEL;
-  if (!model || model.trim() === "") {
-    throw new WorksheetProviderError(
-      "MISSING_CONFIGURATION",
-      "Worksheet generation isn't configured yet — the developer needs to set OPENCODE_MODEL in the server environment (the model name the OPENCODE_BASE_URL endpoint serves).",
-    );
-  }
-
-  const apiKey = env.OPENCODE_API_KEY;
+  const apiKey = env.DEEPSEEK_API_KEY;
   if (!apiKey || apiKey.trim() === "") {
     throw new WorksheetProviderError(
       "MISSING_API_KEY",
-      "Worksheet generation isn't configured yet — the developer needs to add OPENCODE_API_KEY to the server environment.",
+      "Worksheet generation isn't configured yet — the developer needs to add DEEPSEEK_API_KEY to the server environment.",
     );
   }
 
-  return { baseUrl: trimmedBaseUrl, model: model.trim(), apiKey };
-}
+  const rawModel = env.DEEPSEEK_MODEL;
+  const model =
+    rawModel && rawModel.trim() !== "" ? rawModel.trim() : DEFAULT_MODEL;
 
-function isHttpUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
+  return { baseUrl: DEEPSEEK_BASE_URL, model, apiKey };
 }
 
 /**
- * Join a configured base URL to the chat.completions path. Pure and fully
+ * Join a base URL to the chat.completions path. Pure and fully
  * determined by its argument: an already-full endpoint is used as-is, a
  * bare origin/v1-style base gets "/chat/completions" appended.
  */
@@ -294,7 +274,7 @@ export function mapHttpError(status: number): WorksheetProviderError {
     case 401:
       return new WorksheetProviderError(
         "UPSTREAM_ERROR",
-        "The worksheet provider rejected the API key (401). Ask the developer to check OPENCODE_API_KEY.",
+        "The worksheet provider rejected the API key (401). Ask the developer to check DEEPSEEK_API_KEY.",
         status,
       );
     case 402:
