@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, Loader2 } from "lucide-react";
+import { Download, Eye, Loader2 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { TeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
 import {
@@ -11,6 +11,7 @@ import {
   type WorkspaceSummary,
 } from "@/lib/teachers/fileBrowser";
 import { parseExtractionCount, shortDate, type MaterialStatus } from "@/lib/teachers/materialDetail";
+import { buildWorksheetDriveFileName, buildWorksheetMarkdown } from "@/lib/teachers/materialsComposer";
 import { requestWorksheetGeneration, type GenerateWorksheetOutcome } from "@/lib/teachers/generateClient";
 import { MaterialsComposer } from "@/components/teachers/MaterialsComposer";
 import { MaterialDetailModal, type MaterialSummary } from "@/components/teachers/MaterialDetailModal";
@@ -153,6 +154,18 @@ export function MaterialsView({ schemaStatus, currentWorkspace }: MaterialsViewP
     void loadMaterials();
   }
 
+  function downloadWorksheet(worksheet: GeneratedComposerMaterial["worksheet"]) {
+    const blob = new Blob([buildWorksheetMarkdown(worksheet)], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = buildWorksheetDriveFileName(worksheet);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   return (
     <section aria-label="Materials" className="min-h-full px-4 py-16 sm:px-8 lg:px-12">
       {schemaStatus === "not-applied" && (
@@ -177,23 +190,26 @@ export function MaterialsView({ schemaStatus, currentWorkspace }: MaterialsViewP
                       {isGenerating ? "Generating your material…" : isFailed ? (material.error ?? "Generation failed — try again.") : `${Array.isArray(material.content.questions) ? material.content.questions.length : 0} questions · ${shortDate(material.created_at)}`}
                     </p>
                   </div>
-                  <span className={`flex shrink-0 items-center gap-1.5 text-xs ${isFailed ? "text-rose-600" : "text-gray-400"}`}>
-                    {isGenerating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                    {isGenerating ? "Generating" : isFailed ? "Failed" : "Generated"}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className={`flex items-center gap-1.5 text-xs ${isFailed ? "text-rose-600" : "text-gray-400"}`}>
+                      {isGenerating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      {isGenerating ? "Generating" : isFailed ? "Failed" : "Generated"}
+                    </span>
+                    {!isGenerating && !isFailed && <button type="button" onClick={() => downloadWorksheet(material.content)} aria-label={`Download ${material.title}`} className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900"><Download className="h-3.5 w-3.5" />Download</button>}
+                  </div>
                 </div>
               );
             })}
             {recentGenerated.filter((material) => !generatedRows.some((row) => row.id === material.generatedMaterialId)).map((material) => (
               <div key={material.generatedMaterialId} className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
                 <div className="min-w-0"><p className="truncate text-sm font-medium text-gray-900">{material.worksheet.title}</p><p className="mt-1 text-xs text-gray-500">{material.worksheet.questions.length} questions · {shortDate(material.generatedAt)}</p></div>
-                <span className="shrink-0 text-xs text-gray-400">Generated</span>
+                <button type="button" onClick={() => downloadWorksheet(material.worksheet)} aria-label={`Download ${material.worksheet.title}`} className="inline-flex shrink-0 items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900"><Download className="h-3.5 w-3.5" />Download</button>
               </div>
             ))}
             {generatedEntries.map((entry) => {
               if (entry.kind !== "generated") return null;
               const row = rows.find((item) => item.id === entry.materialId);
-              return <div key={entry.id} className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3"><div className="min-w-0"><p className="truncate text-sm font-medium text-gray-900">{entry.title}</p><p className="mt-1 text-xs text-gray-500">{entry.questionCount} questions{entry.generatedAt ? ` · ${shortDate(entry.generatedAt)}` : ""}</p></div>{row && <button type="button" onClick={() => openReview(row)} className="inline-flex shrink-0 items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900"><Eye className="h-3.5 w-3.5" />Open</button>}</div>;
+              return <div key={entry.id} className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3"><div className="min-w-0"><p className="truncate text-sm font-medium text-gray-900">{entry.title}</p><p className="mt-1 text-xs text-gray-500">{entry.questionCount} questions{entry.generatedAt ? ` · ${shortDate(entry.generatedAt)}` : ""}</p></div><div className="flex shrink-0 items-center gap-3">{row && <button type="button" onClick={() => openReview(row)} className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900"><Eye className="h-3.5 w-3.5" />Open</button>}{row !== undefined && typeof row.worksheet === "object" && row.worksheet !== null && <button type="button" onClick={() => downloadWorksheet(row.worksheet as GeneratedComposerMaterial["worksheet"])} aria-label={`Download ${entry.title}`} className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900"><Download className="h-3.5 w-3.5" />Download</button>}</div></div>;
             })}
           </div>
         </div>
