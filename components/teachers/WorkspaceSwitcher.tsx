@@ -17,7 +17,6 @@ import {
 import type { TeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
 import {
   describeWorkspaceSelector,
-  workspaceInitials,
   type WorkspaceSummary,
 } from "@/lib/teachers/fileBrowser";
 
@@ -73,12 +72,6 @@ export function WorkspaceSwitcher({
         >
           {state.phase === "ready" ? (
             <>
-              <span
-                aria-hidden="true"
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-semibold ${dark ? "bg-[#303343] text-[#e4e4e7]" : "bg-gray-900 text-white"}`}
-              >
-                {workspaceInitials(state.current.title)}
-              </span>
               <span className="min-w-0 flex-1">
                 <span className={`block truncate text-sm font-semibold ${dark ? "text-[#f4f4f5]" : "text-gray-900"}`}>
                   {state.current.title}
@@ -134,12 +127,6 @@ export function WorkspaceSwitcher({
                     onSelect={() => onSelect(workspace.id)}
                     className="flex items-start gap-2.5 py-2"
                   >
-                    <span
-                      aria-hidden="true"
-                      className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[10px] font-semibold text-gray-700"
-                    >
-                      {workspaceInitials(workspace.title)}
-                    </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-gray-900">
                         {workspace.title}

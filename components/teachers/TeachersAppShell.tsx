@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import {
   Files,
-  GraduationCap,
   LogOut,
   Menu,
   Sparkles,
@@ -42,11 +40,6 @@ const TAB_ICONS: Record<WorkspaceTabId, typeof Files> = {
   materials: Sparkles,
 };
 
-function statusLabel(schemaStatus: TeachersSchemaStatus): string {
-  if (schemaStatus === "checking") return "Checking";
-  if (schemaStatus === "not-applied") return "Migration pending";
-  return "Ready";
-}
 
 /**
  * Full-screen chrome for the Teachers application — the immersive dashboard
@@ -141,31 +134,11 @@ export function TeachersAppShell({
           >
             <Menu className="h-4 w-4" aria-hidden="true" />
           </button>
-          <Link href="/teachers/dashboard" className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-900 text-white">
-              <GraduationCap className="h-5 w-5" aria-hidden="true" />
-            </span>
-            <span className="min-w-0 leading-tight">
-              <span className="block truncate text-sm font-semibold text-gray-900">
-                TutorMonkey Teachers
-              </span>
-              <span className="block truncate text-[11px] font-light text-gray-500">
-                Workspace
-              </span>
-            </span>
-          </Link>
+          <span className="hidden lg:block text-sm font-medium text-gray-500">Dashboard</span>
         </div>
 
         <div className="flex min-w-0 shrink-0 items-center gap-3">
-          <span
-            className={`hidden shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide sm:inline-flex ${
-              schemaStatus === "ready"
-                ? "bg-gray-900 text-white"
-                : "bg-gray-100 text-gray-500"
-            }`}
-          >
-            {statusLabel(schemaStatus)}
-          </span>
+
           {email && (
             <span
               className="hidden max-w-[220px] truncate text-sm font-light text-gray-600 md:block"

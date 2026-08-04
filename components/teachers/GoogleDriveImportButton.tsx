@@ -26,6 +26,7 @@ import {
   type GoogleDrivePick,
   type GoogleDriveSelectionMode,
 } from "@/lib/teachers/googlePicker";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   loadGooglePicker,
   openGoogleDrivePicker,
@@ -74,6 +75,8 @@ export function GoogleDriveImportButton({
     let active = true;
 
     async function refreshGate() {
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) return;
       const token = await readGoogleProviderToken();
       if (!active) return;
       const nextGate = describeGoogleDriveImportGate({
@@ -82,6 +85,9 @@ export function GoogleDriveImportButton({
       });
       setGate(nextGate);
       onGateChange?.(nextGate);
+      if (!nextGate.available && nextGate.reason === "no-provider-token") {
+        await supabase.auth.signOut();
+      }
     }
 
     void refreshGate();

@@ -12,6 +12,7 @@ import { TeachersAppShell } from "@/components/teachers/TeachersAppShell";
 import { AddWorkspaceDialog } from "@/components/teachers/AddWorkspaceDialog";
 import { DocumentsView } from "@/components/teachers/DocumentsView";
 import { MaterialsView } from "@/components/teachers/MaterialsView";
+import { BetaApplicationGate } from "@/components/teachers/BetaApplicationGate";
 
 type AuthState =
   | { status: "loading" }
@@ -38,6 +39,7 @@ export default function TeachersDashboardPage() {
     status: "loading",
   });
   const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [betaApproved, setBetaApproved] = useState<boolean | null>(null);
   const schemaStatus = useTeachersSchemaStatus();
 
   const {
@@ -57,6 +59,7 @@ export default function TeachersDashboardPage() {
 
     if (!supabase) {
       setAuthState({ status: "signedOut" });
+      setBetaApproved(false);
       return;
     }
 
@@ -69,6 +72,7 @@ export default function TeachersDashboardPage() {
           ? { status: "signedIn", session: data.session }
           : { status: "signedOut" },
       );
+      setBetaApproved(data.session ? null : false);
     });
 
     const {
@@ -80,6 +84,7 @@ export default function TeachersDashboardPage() {
           ? { status: "signedIn", session }
           : { status: "signedOut" },
       );
+      setBetaApproved(session ? null : false);
     });
 
     return () => {
@@ -142,7 +147,15 @@ export default function TeachersDashboardPage() {
         </div>
       )}
 
-      {authState.status === "signedIn" && workspaceSetupVisible && (
+      {authState.status === "signedIn" && betaApproved !== true && (
+        <BetaApplicationGate
+          userId={authState.session.user.id}
+          email={authState.session.user.email ?? null}
+          onApproved={() => setBetaApproved(true)}
+        />
+      )}
+
+      {authState.status === "signedIn" && betaApproved === true && workspaceSetupVisible && (
         <main className="flex h-dvh items-center justify-center bg-gray-50 px-6">
           <section className="w-full max-w-lg text-center animate-fade-in-up">
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-900 text-white shadow-sm">
@@ -177,7 +190,7 @@ export default function TeachersDashboardPage() {
         </main>
       )}
 
-      {authState.status === "signedIn" && !workspaceSetupVisible && (
+      {authState.status === "signedIn" && betaApproved === true && !workspaceSetupVisible && (
         <TeachersAppShell
           email={email ?? null}
           schemaStatus={schemaStatus}
@@ -207,7 +220,7 @@ export default function TeachersDashboardPage() {
       )}
 
       {/* Workspace creation — replaces the old CreateWorkspacePanel surface. */}
-      {authState.status === "signedIn" && (
+      {authState.status === "signedIn" && betaApproved === true && (
         <AddWorkspaceDialog
           open={addWorkspaceOpen}
           schemaStatus={schemaStatus}

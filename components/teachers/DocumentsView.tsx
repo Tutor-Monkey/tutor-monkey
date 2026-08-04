@@ -18,8 +18,6 @@ import {
   ChevronDown,
   ChevronRight,
   FilePlus2,
-  MoreHorizontal,
-  PanelLeftClose,
 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { TeachersSchemaStatus } from "@/hooks/useTeachersSchemaStatus";
@@ -358,22 +356,11 @@ export function DocumentsView({
       aria-label="Documents"
       className="min-h-full rounded-[20px] border border-[#454652] bg-[#20212b] p-6 text-[#f4f4f5] md:p-8"
     >
-      <div className="-mx-6 -mt-6 mb-4 border-b border-[#3b3d49] px-4 pb-3 pt-4 md:-mx-8 md:-mt-8 md:px-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-[18px] font-semibold tracking-tight text-[#f4f4f5]">Explorer</h2>
-          <button type="button" aria-label="Explorer actions" className="rounded-md p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white">
-            <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
-          </button>
-        </div>
-        <div className="mt-6 flex items-center gap-2 px-1">
-          <button type="button" onClick={() => { setExpandedFolders(new Set([""])); setActiveFolderKey(""); }} aria-label="Collapse workspace" className="rounded p-0.5 text-[#c7c8ce] hover:bg-[#30323d]">
-            {expandedFolders.has("") ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
-          </button>
-          <span className="min-w-0 flex-1 truncate text-[17px] font-semibold text-[#f4f4f5]">{currentWorkspace?.title ?? "workspace"}</span>
+      <div className="-mx-6 -mt-6 mb-4 border-b border-[#3b3d49] px-4 pb-3 pt-4 md:-mx-8 md:px-4">
+        <div className="flex items-center justify-end gap-2 px-1">
           <button type="button" onClick={() => setImportOpen(true)} disabled={!isReady || !currentWorkspace} aria-label="New document" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white disabled:opacity-40"><FilePlus2 className="h-5 w-5" /></button>
           <GoogleDriveImportButton mode="folders" compact label="Import folder from Google Drive" onPicked={handleDrivePicked} onGateChange={setDriveGate} disabled={!isReady || !currentWorkspace} />
           <button type="button" onClick={() => void loadDocuments()} disabled={loading} aria-label="Refresh explorer" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white disabled:opacity-40"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button>
-          <button type="button" onClick={() => { setExpandedFolders(new Set([""])); setActiveFolderKey(""); }} aria-label="Collapse all folders" className="rounded p-1 text-[#c7c8ce] hover:bg-[#30323d] hover:text-white"><PanelLeftClose className="h-5 w-5" /></button>
         </div>
       </div>
 
