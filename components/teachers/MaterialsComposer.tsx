@@ -1,0 +1,553 @@
+"use client";
+
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
+import { ArrowUp, Check, Download, FileText, Loader2, Plus } from "lucide-react";
+import {
+  findMentionAtCaret,
+  buildWorksheetDriveFileName,
+  buildWorksheetMarkdown,
+  isReadySourceDoc,
+  type ComposerSourceDoc,
+  SUGGESTION_LIMIT_UI,
+  SUGGESTION_LIMIT_MAX,
+} from "@/lib/teachers/materialsComposer";
+import { MAX_TEACHER_PROMPT_CHARS } from "@/lib/teachers/generateRequest";
+import { shortDate } from "@/lib/teachers/materialDetail";
+import {
+  fetchWorkspaceSuggestions,
+  requestWorkspaceGeneration,
+  type GeneratedComposerMaterial,
+} from "@/lib/teachers/workspaceComposerClient";
+import { hydrateDriveMaterial } from "@/lib/teachers/googleDriveImportClient";
+import {
+  loadGooglePicker,
+  openGoogleDrivePicker,
+  readGoogleProviderToken,
+} from "@/lib/teachers/googlePickerClient";
+import { readGooglePickerPublicConfig } from "@/lib/teachers/googlePicker";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { uploadWorksheetToDrive } from "@/lib/teachers/driveSaveClient";
+
+type MentionPart = { kind: "mention"; doc: ComposerSourceDoc };
+type FolderPart = { kind: "folder"; name: string; path: string[] };
+type TextPart = { kind: "text"; value: string };
+type EditorPart = MentionPart | FolderPart | TextPart;
+
+type MaterialsComposerProps = {
+  currentWorkspaceId: string;
+  onGenerated: (material: GeneratedComposerMaterial) => void;
+};
+
+const emptyParts: EditorPart[] = [{ kind: "text", value: "" }];
+
+function partText(part: EditorPart): string {
+  if (part.kind === "mention") return `@${part.doc.filename}`;
+  if (part.kind === "folder") return `@${part.name}`;
+  return part.value;
+}
+
+function partsText(parts: readonly EditorPart[]): string {
+  return parts.map(partText).join("");
+}
+
+function normalizeParts(parts: EditorPart[]): EditorPart[] {
+  const next: EditorPart[] = [];
+  for (const part of parts) {
+    if (part.kind === "text" && part.value === "" && next.length > 0) continue;
+    if (part.kind === "text" && next.at(-1)?.kind === "text") {
+      const previous = next.at(-1) as TextPart;
+      previous.value += part.value;
+    } else {
+      next.push(part);
+    }
+  }
+  return next.length > 0 ? next : emptyParts;
+}
+
+function readParts(root: HTMLDivElement, docs: readonly ComposerSourceDoc[]): EditorPart[] {
+  const byId = new Map(docs.map((doc) => [doc.id, doc]));
+  return normalizeParts(
+    Array.from(root.childNodes).map((node): EditorPart => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const folderPath = (node as HTMLElement).dataset.folderPath;
+        const folderName = (node as HTMLElement).dataset.folderName;
+        if (folderPath && folderName) return { kind: "folder", name: folderName, path: folderPath.split("/") };
+        const id = (node as HTMLElement).dataset.mentionId;
+        const doc = id ? byId.get(id) : undefined;
+        if (doc) return { kind: "mention", doc };
+      }
+      return { kind: "text", value: node.textContent ?? "" };
+    }),
+  );
+}
+
+function caretOffset(root: HTMLDivElement): number {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.anchorNode) return 0;
+  const range = selection.getRangeAt(0).cloneRange();
+  range.selectNodeContents(root);
+  range.setEnd(selection.anchorNode, selection.anchorOffset);
+  return range.toString().length;
+}
+
+function placeCaretAtEnd(root: HTMLDivElement) {
+  root.focus();
+  const range = document.createRange();
+  range.selectNodeContents(root);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function replaceMention(
+  parts: readonly EditorPart[],
+  start: number,
+  end: number,
+  doc: ComposerSourceDoc,
+): EditorPart[] {
+  const output: EditorPart[] = [];
+  let cursor = 0;
+  let inserted = false;
+  for (const part of parts) {
+    const value = partText(part);
+    const partStart = cursor;
+    const partEnd = cursor + value.length;
+    cursor = partEnd;
+    if (inserted || end <= partStart || start >= partEnd) {
+      output.push(part);
+      continue;
+    }
+    if (part.kind !== "text") {
+      output.push(part);
+      continue;
+    }
+    const localStart = Math.max(0, start - partStart);
+    const localEnd = Math.min(value.length, end - partStart);
+    if (localStart > 0) output.push({ kind: "text", value: value.slice(0, localStart) });
+    output.push({ kind: "mention", doc }, { kind: "text", value: " " });
+    if (localEnd < value.length) output.push({ kind: "text", value: value.slice(localEnd) });
+    inserted = true;
+  }
+  return normalizeParts(inserted ? output : [...parts, { kind: "mention", doc }, { kind: "text", value: " " }]);
+}
+
+function removeMentionBeforeCaret(parts: readonly EditorPart[], offset: number): EditorPart[] | null {
+  let cursor = 0;
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+    const end = cursor + partText(part).length;
+    if (part.kind === "mention" && end === offset) {
+      return normalizeParts([...parts.slice(0, index), ...parts.slice(index + 1)]);
+    }
+    cursor = end;
+  }
+  return null;
+}
+
+export function MaterialsComposer({ currentWorkspaceId, onGenerated }: MaterialsComposerProps) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [parts, setParts] = useState<EditorPart[]>(emptyParts);
+  const [caret, setCaret] = useState(0);
+  const [docs, setDocs] = useState<ComposerSourceDoc[]>([]);
+  const [suggestions, setSuggestions] = useState<ComposerSourceDoc[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generated, setGenerated] = useState<GeneratedComposerMaterial | null>(null);
+  const [driveSaving, setDriveSaving] = useState(false);
+  const [driveSaved, setDriveSaved] = useState<string | null>(null);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [pendingSources, setPendingSources] = useState<ComposerSourceDoc[]>([]);
+  const [pendingPrompt, setPendingPrompt] = useState("");
+
+  const text = useMemo(() => partsText(parts), [parts]);
+  const mention = useMemo(() => findMentionAtCaret(text, caret), [text, caret]);
+  const selectedDocs = useMemo(
+    () => parts.filter((part): part is MentionPart => part.kind === "mention").map((part) => part.doc),
+    [parts],
+  );
+  const canUseSource = (doc: ComposerSourceDoc) => isReadySourceDoc(doc) || doc.sourceType === "google_drive";
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchWorkspaceSuggestions(currentWorkspaceId, "", SUGGESTION_LIMIT_UI, controller.signal).then((result) => {
+      if (!controller.signal.aborted && result.ok) {
+        setDocs((current) => [...current, ...result.candidates.filter((doc) => !current.some((item) => item.id === doc.id))]);
+      }
+    });
+    return () => controller.abort();
+  }, [currentWorkspaceId]);
+
+  useEffect(() => {
+    if (!mention.active) {
+      setMenuOpen(false);
+      return;
+    }
+    const controller = new AbortController();
+    setMenuOpen(true);
+    setLoadingSuggestions(true);
+    void fetchWorkspaceSuggestions(currentWorkspaceId, mention.query, SUGGESTION_LIMIT_UI, controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+      setLoadingSuggestions(false);
+      if (result.ok) {
+        setDocs((current) => [...current, ...result.candidates.filter((doc) => !current.some((item) => item.id === doc.id))]);
+        setSuggestions(result.candidates);
+        setActiveIndex(0);
+      }
+    });
+    return () => controller.abort();
+  }, [currentWorkspaceId, mention.active, mention.query]);
+
+  async function handleSourceDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const documentPayload = event.dataTransfer.getData("application/x-tutormonkey-document");
+    const folderPayload = event.dataTransfer.getData("application/x-tutormonkey-folder");
+    let dropped: ComposerSourceDoc[] = [];
+    if (documentPayload) {
+      try {
+        const entry = JSON.parse(documentPayload) as { id: string; name: string; sourceType: string; status: string; createdAt: string; mimeType?: string | null; folderSegments?: string[] };
+        dropped = [{ id: entry.id, filename: entry.name, sourceType: entry.sourceType, mimeType: entry.mimeType ?? null, status: entry.status as ComposerSourceDoc["status"], createdAt: entry.createdAt, folderSegments: entry.folderSegments ?? [] }];
+      } catch { return; }
+    } else if (folderPayload) {
+      try {
+        const folder = JSON.parse(folderPayload) as { name: string; path: string[] };
+        const nextParts = normalizeParts([...parts, { kind: "folder", name: folder.name, path: folder.path }, { kind: "text", value: " " }]);
+        setParts(nextParts);
+        requestAnimationFrame(() => {
+          if (!editorRef.current) return;
+          editorRef.current.innerHTML = "";
+          nextParts.forEach((part, index) => editorRef.current?.appendChild(renderDomPart(part, index)));
+          placeCaretAtEnd(editorRef.current);
+          setCaret(partsText(nextParts).length);
+        });
+      } catch { return; }
+      return;
+    }
+    const usable = dropped.filter(canUseSource);
+    if (usable.length === 0) return;
+    const nextDocs = [...docs, ...usable.filter((doc) => !docs.some((item) => item.id === doc.id))];
+    const nextParts = normalizeParts([...parts, ...usable.flatMap((doc) => [{ kind: "mention" as const, doc }, { kind: "text" as const, value: " " }])]);
+    setDocs(nextDocs);
+    setParts(nextParts);
+    if (pendingPrompt) setPendingSources((current) => [...current, ...usable.filter((doc) => !current.some((item) => item.id === doc.id))]);
+    requestAnimationFrame(() => {
+      if (!editorRef.current) return;
+      editorRef.current.innerHTML = "";
+      nextParts.forEach((part, index) => editorRef.current?.appendChild(renderDomPart(part, index)));
+      placeCaretAtEnd(editorRef.current);
+      setCaret(partsText(nextParts).length);
+    });
+  }
+
+  function syncEditor() {
+    if (!editorRef.current) return;
+    const nextParts = readParts(editorRef.current, docs);
+    setParts(nextParts);
+    setCaret(caretOffset(editorRef.current));
+  }
+
+  function selectSuggestion(doc: ComposerSourceDoc) {
+    const nextParts = replaceMention(parts, mention.start, mention.end, doc);
+    setDocs((current) => current.some((item) => item.id === doc.id) ? current : [...current, doc]);
+    if (pendingPrompt) setPendingSources((current) => current.some((item) => item.id === doc.id) ? current : [...current, doc]);
+    setParts(nextParts);
+    setSuggestions([]);
+    setMenuOpen(false);
+    requestAnimationFrame(() => {
+      if (!editorRef.current) return;
+      editorRef.current.innerHTML = "";
+      nextParts.forEach((part, index) => editorRef.current?.appendChild(renderDomPart(part, index)));
+      placeCaretAtEnd(editorRef.current);
+      setCaret(partsText(nextParts).length);
+    });
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (menuOpen && suggestions.length > 0) {
+      if (event.key === "ArrowDown") { event.preventDefault(); setActiveIndex((value) => Math.min(value + 1, suggestions.length - 1)); return; }
+      if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex((value) => Math.max(value - 1, 0)); return; }
+      if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); selectSuggestion(suggestions[activeIndex]); return; }
+      if (event.key === "Escape") { event.preventDefault(); setMenuOpen(false); return; }
+    }
+    if (event.key === "Backspace" && editorRef.current) {
+      const offset = caretOffset(editorRef.current);
+      const next = removeMentionBeforeCaret(parts, offset);
+      if (next) {
+        event.preventDefault();
+        setParts(next);
+        requestAnimationFrame(() => {
+          if (editorRef.current) {
+            editorRef.current.innerHTML = "";
+            next.forEach((part, index) => editorRef.current?.appendChild(renderDomPart(part, index)));
+            placeCaretAtEnd(editorRef.current);
+          }
+        });
+      }
+    }
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void prepareGeneration();
+    }
+  }
+
+  async function prepareGeneration() {
+    if (generating || pendingPrompt) return;
+    const prompt = text.trim();
+    if (!prompt || prompt.length > MAX_TEACHER_PROMPT_CHARS) return;
+    setGenerating(true);
+    setGenerationError(null);
+    try {
+      const result = await fetchWorkspaceSuggestions(currentWorkspaceId, prompt, SUGGESTION_LIMIT_MAX);
+      if (!result.ok) {
+        setGenerationError(result.error);
+        return;
+      }
+      const explicitIds = new Set(selectedDocs.map((doc) => doc.id));
+      const candidates = [
+        ...selectedDocs,
+        ...result.candidates.filter((doc) => !explicitIds.has(doc.id)),
+      ].filter(canUseSource).slice(0, 12);
+      if (candidates.length === 0) {
+        setGenerationError("No usable source documents were found in this workspace.");
+        return;
+      }
+      setPendingPrompt(prompt);
+      setPendingSources(candidates);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function confirmGeneration() {
+    if (generating || !pendingPrompt || pendingSources.length === 0) return;
+    setGenerating(true);
+    setGenerationError(null);
+    try {
+      const driveToken = await readGoogleProviderToken();
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) {
+        setGenerationError("The workspace connection is unavailable — please refresh and try again.");
+        return;
+      }
+      for (const doc of pendingSources) {
+        if (!isReadySourceDoc(doc) && doc.sourceType === "google_drive") {
+          const token = driveToken;
+          if (!token) {
+            setGenerationError(`Couldn't prepare ${doc.filename}: Google Drive authorization is unavailable. Sign out and sign back in, then try again.`);
+            return;
+          }
+          const hydration = await hydrateDriveMaterial({ token, materialId: doc.id, workspaceId: currentWorkspaceId, supabase });
+          if (!hydration.ok) {
+            setGenerationError(`Couldn't prepare ${doc.filename}: ${hydration.error}`);
+            return;
+          }
+        }
+      }
+      const materialIds = Array.from(new Set(pendingSources.map((doc) => doc.id)));
+      const outcome = await requestWorkspaceGeneration(currentWorkspaceId, {
+        prompt: pendingPrompt,
+        materialIds,
+        confirmedMaterialIds: materialIds,
+      });
+      if (!outcome.ok) {
+        setGenerationError(outcome.error);
+        return;
+      }
+      setGenerated(outcome.material);
+      onGenerated(outcome.material);
+      setPendingSources([]);
+      setPendingPrompt("");
+      setParts(emptyParts);
+      if (editorRef.current) editorRef.current.innerHTML = "";
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function downloadGeneratedMaterial() {
+    if (!generated) return;
+    const markdown = buildWorksheetMarkdown(generated.worksheet);
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = buildWorksheetDriveFileName(generated.worksheet);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function saveToDrive() {
+    if (!generated || driveSaving) return;
+    setDriveSaving(true);
+    setDriveSaved(null);
+    setDriveError(null);
+    try {
+      const token = await readGoogleProviderToken();
+      const config = readGooglePickerPublicConfig({ apiKey: process.env.NEXT_PUBLIC_GOOGLE_PICKER_API_KEY, cloudProjectNumber: process.env.NEXT_PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER });
+      if (!token) {
+        setDriveError("Google Drive authorization is unavailable. Sign in again and retry.");
+        return;
+      }
+      if (!config) {
+        setDriveError("Google Drive saving isn't configured for this browser.");
+        return;
+      }
+      await loadGooglePicker();
+      await new Promise<void>((resolve) => openGoogleDrivePicker({
+        token,
+        config,
+        mode: "folders",
+        onCanceled: () => { setDriveError("Save canceled — no Drive folder was selected."); resolve(); },
+        onError: () => { setDriveError("Google Drive couldn't open the folder picker."); resolve(); },
+        onPicked: async (picks) => {
+          const folder = picks.find((pick) => pick.kind === "folder");
+          if (!folder) { setDriveError("Select a Google Drive folder to save this material."); resolve(); return; }
+          const upload = await uploadWorksheetToDrive({ token, folderId: folder.id, worksheet: generated.worksheet, title: generated.worksheet.title });
+          if (!upload.ok) { setDriveError(upload.error); resolve(); return; }
+          const syncResponse = await fetch(`/api/teachers/generated-materials/${generated.generatedMaterialId}/drive-sync`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ driveFileId: upload.fileId, status: "synced" }) });
+          setDriveSaved(upload.name);
+          if (!syncResponse.ok) setDriveError("Saved to Google Drive, but workspace sync could not be recorded.");
+          resolve();
+        },
+      }));
+    } catch {
+      setDriveError("Google Drive saving failed — please try again.");
+    } finally {
+      setDriveSaving(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-3xl">
+      <div className="mb-10 text-center">
+        <h2 className="text-4xl font-medium tracking-tight text-gray-900">What would you like to create?</h2>
+        <p className="mt-3 text-sm text-gray-500">Mention a document with @, or describe what you need.</p>
+      </div>
+      <div className="relative">
+        {menuOpen && (
+          <div role="listbox" aria-label="Document suggestions" className="absolute bottom-full left-0 right-0 z-20 mb-3 max-h-64 overflow-auto rounded-2xl border border-gray-200 bg-white p-2 shadow-xl">
+            {loadingSuggestions && <div className="px-3 py-2 text-sm text-gray-500">Searching documents…</div>}
+            {!loadingSuggestions && suggestions.length === 0 && <div className="px-3 py-2 text-sm text-gray-500">No matching documents</div>}
+            {suggestions.map((doc, index) => (
+              <button key={doc.id} type="button" role="option" aria-selected={activeIndex === index} onMouseDown={(event) => { event.preventDefault(); selectSuggestion(doc); }} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm ${activeIndex === index ? "bg-gray-100" : "hover:bg-gray-50"}`}>
+                <FileText className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate font-medium text-gray-800">{doc.filename}</span>
+                <span className="text-xs text-gray-400">{doc.status}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="rounded-3xl border border-gray-300 bg-white p-3 shadow-sm transition-shadow focus-within:border-gray-500 focus-within:shadow-md">
+          <div className="flex items-end gap-3">
+            <button type="button" aria-label="Add a document mention" onClick={() => { editorRef.current?.focus(); }} className="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"><Plus className="h-5 w-5" /></button>
+            <div
+              ref={editorRef}
+              contentEditable
+              role="textbox"
+              aria-label="Describe the material to generate"
+              aria-multiline="true"
+              data-placeholder="Ask TutorMonkey to create a material…"
+              suppressContentEditableWarning
+              onInput={syncEditor}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => void handleSourceDrop(event)}
+              onKeyDown={handleKeyDown}
+              onKeyUp={() => editorRef.current && setCaret(caretOffset(editorRef.current))}
+              onClick={() => editorRef.current && setCaret(caretOffset(editorRef.current))}
+              className="min-h-12 max-h-40 flex-1 overflow-y-auto whitespace-pre-wrap px-1 py-2 text-base leading-6 text-gray-900 outline-none empty:before:text-gray-400 empty:before:content-[attr(data-placeholder)]"
+            >
+            </div>
+            <button type="button" aria-label="Generate material" onClick={() => void prepareGeneration()} disabled={generating || Boolean(pendingPrompt) || text.trim() === ""} className="mb-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-900 text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400">
+              {generating ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowUp className="h-5 w-5" />}
+            </button>
+          </div>
+          <div className="mt-2 flex items-center justify-between px-12 text-[11px] text-gray-400">
+            <span>{selectedDocs.length > 0 ? `${selectedDocs.length} document${selectedDocs.length === 1 ? "" : "s"} attached` : "Use @ to attach a document"}</span>
+            <span>Enter to generate · Shift+Enter for a new line</span>
+          </div>
+        </div>
+      </div>
+      {pendingPrompt && (
+        <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-indigo-950">Review source documents</p>
+              <p className="mt-1 text-xs text-indigo-900/70">TutorMonkey selected these sources. Remove any, or add a document with @ before confirming.</p>
+            </div>
+            <button type="button" onClick={() => { setPendingPrompt(""); setPendingSources([]); }} className="text-xs font-medium text-indigo-700 hover:text-indigo-950">Cancel</button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {pendingSources.map((doc) => (
+              <span key={doc.id} className="inline-flex max-w-full items-center gap-1 rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-xs text-indigo-900">
+                <FileText className="h-3 w-3 shrink-0" />
+                <span className="max-w-[18rem] truncate" title={doc.folderSegments.length > 0 ? doc.folderSegments.join(" / ") : "Workspace root"}>{doc.filename}</span>
+                <span className="max-w-[12rem] truncate text-[10px] text-indigo-500">{doc.folderSegments.length > 0 ? doc.folderSegments.join(" / ") : "Workspace root"}</span>
+                <button type="button" aria-label={`Remove ${doc.filename}`} onClick={() => setPendingSources((current) => current.filter((item) => item.id !== doc.id))} className="rounded-full p-0.5 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-900">×</button>
+              </span>
+            ))}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button type="button" onClick={() => void confirmGeneration()} disabled={generating || pendingSources.length === 0} className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-xs font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50">
+              {generating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {generating ? "Preparing sources…" : "Confirm and generate"}
+            </button>
+          </div>
+        </div>
+      )}
+      {generating && (
+        <div role="status" aria-live="polite" className="mt-4 flex items-center gap-2 text-sm text-gray-500">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          Finding source documents and generating your material…
+        </div>
+      )}
+      {generationError && (
+        <p role="alert" className="mt-4 text-center text-sm text-rose-600">{generationError}</p>
+      )}
+      {generated && (
+        <div className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Generated material</p>
+              <h3 className="mt-1 text-lg font-semibold text-gray-900">{generated.worksheet.title}</h3>
+              <p className="mt-1 text-sm text-gray-500">{generated.worksheet.questions.length} questions · {shortDate(generated.generatedAt)}</p>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={downloadGeneratedMaterial} className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"><Download className="h-3 w-3" /> Download</button>
+              <button type="button" onClick={() => void saveToDrive()} disabled={driveSaving} className="rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-60">{driveSaving ? "Saving…" : driveSaved ? <span className="inline-flex items-center gap-1"><Check className="h-3 w-3" /> Saved to Drive</span> : "Save to Drive"}</button>
+            </div>
+          </div>
+          {driveError && <p role="alert" className="mt-3 text-right text-xs text-rose-600">{driveError}</p>}
+          {driveSaved && !driveError && <p role="status" className="mt-3 text-right text-xs text-emerald-700">Saved to Google Drive: {driveSaved}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function renderDomPart(part: EditorPart, index: number): Node {
+  if (part.kind === "text") return document.createTextNode(part.value);
+  const span = document.createElement("span");
+  span.contentEditable = "false";
+  span.className = "mx-0.5 inline-flex select-none items-center rounded-md bg-indigo-100 px-1.5 py-0.5 align-baseline text-sm font-medium text-indigo-700";
+  if (part.kind === "folder") {
+    span.dataset.folderName = part.name;
+    span.dataset.folderPath = part.path.join("/");
+    span.textContent = `@${part.name}`;
+  } else {
+    span.dataset.mentionId = part.doc.id;
+    span.textContent = `@${part.doc.filename}`;
+  }
+  span.setAttribute("data-part-index", String(index));
+  return span;
+}

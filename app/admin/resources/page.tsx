@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Navigation from "@/components/Navigation";
 import { ResourceFolder } from "@/types/resources";
+import { TeacherApplicationsPanel } from "@/components/admin/TeacherApplicationsPanel";
 
 interface LinkInput {
   label: string;
@@ -360,6 +361,8 @@ export default function AdminResourcesPage() {
               a new one, and paste the Google Drive links.
             </p>
           </header>
+
+          <TeacherApplicationsPanel />
 
           <div className="grid gap-12 lg:grid-cols-[2fr,1fr]">
             <form
