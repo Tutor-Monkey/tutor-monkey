@@ -83,16 +83,7 @@ export default function TutorsPage() {
       roles: ["Tutor"],
     },
 
-    {
-      name: "Collin Cui",
-      school: "Junior at Plano West",
-      subjects: ["Community Outreach", "Partnerships"],
-      quote: "Community connections power our mission to reach more students.",
-      rating: 5,
-      image: LINKS.collinCuiImage,
-      achievements: ["Plano West Outreach Lead", "National Honor Society Volunteer"],
-      roles: ["Outreach"],
-    },
+
     {
       name: "Enoch Chan",
       school: "Junior at Plano West",
@@ -161,11 +152,7 @@ export default function TutorsPage() {
       role: "Logistics",
       description: "Operations minds handling scheduling, platforms, and student support.",
     },
-    {
-      title: "Outreach",
-      role: "Outreach",
-      description: "Community connectors spreading the word and building partnerships.",
-    },
+
   ];
 
   const tutorCount = tutors.filter((member) => member.roles.includes("Tutor")).length;
