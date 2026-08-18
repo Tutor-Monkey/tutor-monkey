@@ -182,7 +182,7 @@ export default function BookPage() {
                   <option value="joshua-gan">Joshua Gan</option>
                   <option value="skanda-gopikannan">Skanda Gopikannan</option>
                   <option value="matthew-xie">Matthew Xie</option>
-                  <option value="jennifer-duan">Jennifer Duan</option>
+
                   <option value="enoch-chan">Enoch Chan</option>
                   <option value="ishaan-nirmal">Ishaan Nirmal</option>
                 </select>

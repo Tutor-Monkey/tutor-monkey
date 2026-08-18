@@ -24,12 +24,6 @@ const tutors = [
     subjects: ["English", "History"],
     image: LINKS.jamesChenImage,
   },
-  {
-    name: "Jennifer Duan",
-    school: "Plano West",
-    subjects: ["Science", "Math"],
-    image: LINKS.jenniferDuanImage,
-  },
 ];
 
 export default function TutorsSection() {

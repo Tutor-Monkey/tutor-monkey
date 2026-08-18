@@ -10,7 +10,6 @@ export const LINKS = {
   joshuaGanImage: "https://4wqhelux5g89r4e4.public.blob.vercel-storage.com/pfps/JoshuaGan-pfp.jpg",
   skandaGopikannanImage: "https://4wqhelux5g89r4e4.public.blob.vercel-storage.com/pfps/skanda-pfp.jpg",
   matthewXieImage: "https://4wqhelux5g89r4e4.public.blob.vercel-storage.com/pfps/matthew-pfp.jpg",
-  jenniferDuanImage: "https://4wqhelux5g89r4e4.public.blob.vercel-storage.com/pfps/jennifer-pfp.jpg",
   enochChanImage: "https://4wqhelux5g89r4e4.public.blob.vercel-storage.com/pfps/enoch-pfp.jpeg",
   ishaanNirmalImage: "https://4wqhelux5g89r4e4.public.blob.vercel-storage.com/pfps/ishaan-pfp.png",
   andyLeeImage: "https://4wqhelux5g89r4e4.public.blob.vercel-storage.com/pfps/andy-pfp.jpg",

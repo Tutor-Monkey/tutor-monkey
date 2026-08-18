@@ -82,17 +82,7 @@ export default function TutorsPage() {
       achievements: ["DHR on AMC10", "Gold on BPhO IPC", "AP Physics 1 (5)"],
       roles: ["Tutor"],
     },
-    {
-      name: "Jennifer Duan",
-      school: "Junior at Plano West",
-      subjects: ["Science", "Mathematics", "English"],
-      quote:
-        "STEM isn't just for boys. I'm passionate about encouraging girls in science.",
-      rating: 5,
-      image: LINKS.jenniferDuanImage,
-      achievements: ["6 AP Classes", "Science Fair Winner", "Girls in STEM Officer"],
-      roles: ["Tutor", "Outreach"],
-    },
+
     {
       name: "Collin Cui",
       school: "Junior at Plano West",
