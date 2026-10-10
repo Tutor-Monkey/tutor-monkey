@@ -118,7 +118,7 @@ export default function AboutPage() {
                   You can review our official documentation and support our mission directly.
                 </p>
                 <a
-                  href="https://hcb.hackclub.com/tutor-monkey/fiscal_sponsorship_letter.pdf"
+                  href="/fiscal-sponsorship-letter.pdf"
                   className="text-gray-900 underline decoration-gray-400 underline-offset-4 hover:text-gray-700 transition-colors"
                   target="_blank"
                   rel="noreferrer"

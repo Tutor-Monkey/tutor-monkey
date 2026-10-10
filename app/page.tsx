@@ -6,6 +6,7 @@ import AutoPlayTextSequence from '@/components/AutoPlayTextSequence';
 import TutorsSection from '@/components/TutorsSection';
 import TestimonialsSection from '@/components/TestimonialsSection';
 import Footer from '@/components/Footer';
+import TutoringCarousel from '@/components/TutoringCarousel';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useIsClient } from '@/hooks/useIsClient';
 
@@ -29,6 +30,7 @@ export default function Home() {
       >
         <Navigation />
         <AutoPlayTextSequence />
+        <TutoringCarousel />
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, delay: 1.0 }}>
           <section className="px-6 pt-10 pb-6">
             <div className="max-w-6xl mx-auto">

@@ -75,7 +75,7 @@ export default function AutoPlayTextSequence() {
               <Link href="/book">
                 <Button
                   variant="outline"
-                  className="border-white/40 bg-white/10 text-white hover:bg-white/20 px-8 py-4 text-lg rounded-lg transition-all duration-300 font-medium"
+                  className="border-gray-900 bg-gray-900 px-8 py-4 text-lg font-medium text-white shadow-lg transition-all duration-300 hover:border-gray-800 hover:bg-gray-800"
                 >
                   Book a Session
                 </Button>

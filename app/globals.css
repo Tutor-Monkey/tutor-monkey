@@ -2,6 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes tutoring-carousel-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.tutoring-carousel {
+  overflow: hidden;
+}
+
+.tutoring-carousel-track {
+  display: flex;
+  width: max-content;
+  animation: tutoring-carousel-scroll 36s linear infinite;
+}
+
+.tutoring-carousel-group {
+  display: flex;
+  gap: 1.25rem;
+  padding-right: 1.25rem;
+}
+
+.tutoring-carousel:hover .tutoring-carousel-track,
+.tutoring-carousel:focus-within .tutoring-carousel-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tutoring-carousel {
+    overflow-x: auto;
+  }
+
+  .tutoring-carousel-track {
+    animation: none;
+  }
+
+  .tutoring-carousel-group[aria-hidden="true"] {
+    display: none;
+  }
+}
+
 :root {
   /* Core colors */
   --primary: #3f3f3f;  /* gray-900 */

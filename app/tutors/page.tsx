@@ -110,7 +110,6 @@ export default function TutorsPage() {
       ],
       roles: ["Tutor", "Education"],
     },
-    // New member added here
     {
       name: "Sam Luong",
       school: "Sophomore at Jasper",
@@ -118,8 +117,18 @@ export default function TutorsPage() {
       quote:
         "Creating a supportive learning environment is key to unlocking a student's potential.",
       rating: 5,
-      image: LINKS.samLuongImage, // Assuming you have a link defined for Sam Luong
-      achievements: ["Perfect PSAT Math", "Taking 8 AP Classes", ""],
+      image: LINKS.samLuongImage,
+      achievements: ["Perfect PSAT Math", "Taking 8 AP Classes"],
+      roles: ["Tutor", "Education"],
+    },
+    {
+      name: "Krish Anand",
+      school: "",
+      subjects: ["Mathematics", "English", "Test Prep"],
+      quote: "",
+      rating: 5,
+      image: "/images/tutors/krish-anand.jpg",
+      achievements: [],
       roles: ["Tutor", "Education"],
     },
     {
@@ -248,11 +257,12 @@ export default function TutorsPage() {
                         className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover-lift"
                       >
                         <div className="flex items-center mb-4">
-                          <div className="relative w-16 h-16 rounded-full overflow-hidden mr-4">
+                          <div className="relative h-16 w-16 flex-none overflow-hidden rounded-full mr-4">
                             <Image
                               src={tutor.image || "/placeholder.svg"}
                               alt={tutor.name}
                               fill
+                              sizes="64px"
                               className="object-cover"
                             />
                           </div>
@@ -260,7 +270,9 @@ export default function TutorsPage() {
                             <h3 className="text-lg font-medium text-gray-900 font-display">
                               {tutor.name}
                             </h3>
-                            <p className="text-gray-600 font-medium">{tutor.school}</p>
+                            {tutor.school ? (
+                              <p className="text-gray-600 font-medium">{tutor.school}</p>
+                            ) : null}
                             <div className="mt-2 flex flex-wrap gap-2">
                               {tutor.roles.map((role) => (
                                 <span
