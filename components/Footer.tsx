@@ -16,7 +16,6 @@ export default function Footer() {
           <div>
             <h3 className="font-medium mb-4">Quick Links</h3>
             <div className="space-y-2" style={{ color: 'var(--textMuted)' }}>
-              <Link href="/subjects" className="hover:text-white transition-colors font-light block">Subjects</Link>
               <Link href="/tutors" className="hover:text-white transition-colors font-light block">Tutors</Link>
               <Link href="/contact" className="hover:text-white transition-colors font-light block">Contact</Link>
             </div>

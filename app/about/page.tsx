@@ -251,7 +251,6 @@ export default function AboutPage() {
               <div>
                 <h3 className="font-medium mb-4">Services</h3>
                 <ul className="space-y-2 text-gray-400">
-                  <li><Link href="/subjects" className="hover:text-white transition-colors font-light">Subjects</Link></li>
                   <li><Link href="/book" className="hover:text-white transition-colors font-light">Book a Session</Link></li>
                   <li><Link href="/tutors" className="hover:text-white transition-colors font-light">Meet Tutors</Link></li>
                 </ul>
